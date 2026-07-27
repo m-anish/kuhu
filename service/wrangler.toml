@@ -35,8 +35,8 @@ VAPID_SUBJECT = "mailto:anishmg@umich.edu"
 # ships — the app works fully without either.
 #
 # Telegram: create a bot with @BotFather, add it to the channel as an admin,
-# then set the channel here and the token as a secret.
-# TELEGRAM_CHAT_ID = "@kuhunotices"
+# then set the channel here and the token as a secret (TELEGRAM_BOT_TOKEN).
+TELEGRAM_CHAT_ID = "@kuhunotices"
 #
 # MQTT: retained publishes to kuhu/<area>/cuts, for gadgets that would rather
 # be told than poll.

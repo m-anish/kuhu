@@ -11,16 +11,54 @@ Live: **https://kuhuapp.starstucklab.com**
 | Path | Who | What |
 |---|---|---|
 | `/` | Households | Pick areas, allow notifications, see what's coming. |
-| `/post` | The team | Join once with an invite code, then post notices. |
+| `/post` | The team | Post notices; admins also manage people and areas. |
+| `/join` | Anyone invited | Where an invite link lands. Used once, then dead. |
 
 ## How a poster joins
 
-Invite code, not OTP. The team gets a code; a lineman enters it once on their
-phone with their name, and the server returns a bearer token that lives in
-`localStorage` from then on. Only the token's SHA-256 hash is stored — the
-database never holds anything that could be replayed, and rotating a team's
-access is one `UPDATE teams SET invite_code`. No SMS, no DLT paperwork, no
-per-message cost.
+**A link, sent on WhatsApp, that dies when used.** An admin mints an invite from
+the Admin section of `/post`, picks the role the person will have, and shares it
+— the app opens WhatsApp with the message prefilled. The recipient taps it,
+sees which team is inviting them and as what, types their name, and is in. Their
+role was decided by the admin before the link existed; there is nothing for them
+to choose or get wrong.
+
+An invite dies on **first use**, and separately on expiry (24h / 2 days / 7 days,
+admin's choice), and can be cancelled before either. The token rides in the URL
+**fragment** (`/join#t=…`), so it never reaches the server in a request line and
+never lands in a log or a `Referer` header — the page reads it client-side and
+POSTs it. A `?t=` query is accepted as a fallback for in-app browsers that
+rewrite links.
+
+Only SHA-256 hashes are stored, for both invites and the resulting poster
+tokens. The database holds nothing replayable.
+
+## Roles
+
+| Role | Can |
+|---|---|
+| `poster` | Post and cancel notices for the team's areas. |
+| `admin` | Everything a poster can, plus: mint and cancel invite links, see and remove team members, add areas, rename areas. |
+
+Two invariants are enforced server-side, not just hidden in the UI: an admin
+**cannot revoke themselves**, and the **last remaining admin cannot be
+removed**. Between them a team can't lock itself out.
+
+Removing someone sets `revoked_at` rather than deleting the row — their token
+stops working on the next request, while "who posted this notice" survives.
+
+## The first admin
+
+There is nobody to invite the first admin, so they are minted from the command
+line:
+
+```bash
+node tools/mint-invite.mjs --admin --hours 168 --note "who it's for"
+node tools/mint-invite.mjs --admin --local          # against local dev
+```
+
+It prints the link once. After that, admins invite everyone else from the app
+and this script is not needed again.
 
 ## How push works
 
@@ -41,14 +79,33 @@ GET  /api/regions/{slug}/next-cuts    upcoming notices for one region
 GET  /api/vapid-key                   push public key
 ```
 
+Joining (public, but useless without a live invite token):
+
+```
+GET  /api/invites/preview?t=…         {valid, team, role} — what the link offers
+POST /api/invites/redeem              {token, name, phone} → {token, team, role}
+```
+
 Poster, `Authorization: Bearer <token>`:
 
 ```
-POST /api/auth/claim                  {code, name} → {token, team, regions}
+GET  /api/me                          {name, role, regions}
 POST /api/notices                     {region, kind, from, to, reason_en, reason_hi}
 POST /api/notices/{id}/cancel
 GET  /api/team/regions                what this poster may post to
 GET  /api/team/notices                the team's recent notices
+```
+
+Admin, same header, `role=admin` (everything below 403s for a plain poster):
+
+```
+POST /api/invites                     {role, hours, note} → {url, expires_at}
+GET  /api/invites                     open / used / expired / revoked
+POST /api/invites/{id}/revoke
+GET  /api/team/members
+POST /api/team/members/{id}/revoke
+POST /api/regions                     {slug, name_en, name_hi}
+POST /api/regions/{slug}/rename       {name_en, name_hi} — names only, never the slug
 ```
 
 Subscriber:
@@ -71,7 +128,16 @@ npm run db:local && npm run db:seed:local
 VAPID_PRIVATE_JWK="$(cat your-key.jwk)" npx wrangler dev
 ```
 
-Local dev seeds three wards and the invite code `KUHU-CHANGE-ME`.
+Local dev seeds three wards and no users; mint yourself in with
+`node tools/mint-invite.mjs --admin --local`.
+
+### Changing the app's files
+
+The service worker caches the shell. It uses stale-while-revalidate so an
+update always lands by the next load, but **bump `CACHE` in `app/sw.js`**
+whenever you change a shell asset if you want the update to land immediately —
+a fixed cache name with cache-first was how an earlier version managed to serve
+its own stale JavaScript forever.
 
 ## Deploying it
 
@@ -84,12 +150,7 @@ npm run db:remote && npm run db:seed:remote
 npx wrangler deploy
 ```
 
-**Change the invite code before anyone real uses it** — `seed.sql` ships an
-obvious placeholder on purpose:
-
-```bash
-npx wrangler d1 execute kuhu --remote --command "UPDATE teams SET invite_code='YOUR-CODE' WHERE id=1;"
-```
+Then mint the first admin (see above) and send them the link.
 
 Rotating the VAPID keypair invalidates every existing push subscription and
 every subscriber has to tap "Notify me" again. Generate once; leave it alone.

@@ -216,6 +216,81 @@ button.big.warn { background: var(--alarm); color: #14090a; }
 
 .notice button:hover { color: var(--alarm); border-color: var(--alarm); }
 
+/* ---------- admin ---------- */
+h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 1.6rem 0 0.7rem;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.1rem 1.15rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.panel h3 { margin-top: 0; }
+.panel button.big + button.big { margin-top: 0.6rem; }
+
+small.hint {
+  display: block;
+  color: var(--mute);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin-top: 0.35rem;
+}
+
+/* one line per invite / member / area, with an action on the right */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem 0.95rem;
+  margin-bottom: 0.55rem;
+}
+
+.row > div:first-child { flex: 1; min-width: 9rem; }
+.row.dim { opacity: 0.5; }
+.row .sub { color: var(--dim); font-size: 0.82rem; }
+.row code { font-family: var(--mono); font-size: 0.78rem; color: var(--amber); }
+
+.row button.mini {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font: inherit;
+  font-size: 0.82rem;
+  border-radius: 8px;
+  padding: 0.45rem 0.85rem;
+  min-height: 2.4rem;
+  cursor: pointer;
+}
+
+.row button.mini:hover { color: var(--alarm); border-color: var(--alarm); }
+
+.rename-form { flex-basis: 100%; margin-top: 0.7rem; }
+
+/* the generated invite link — must be readable and selectable */
+.linkbox {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--sage);
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 0.7rem 0.8rem;
+  margin-bottom: 0.7rem;
+  word-break: break-all;
+  user-select: all;
+}
+
 /* ---------- misc ---------- */
 .empty { color: var(--mute); font-style: italic; }
 

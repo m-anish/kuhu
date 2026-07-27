@@ -1,18 +1,19 @@
--- kuhu — D1 schema, Season 1.
+-- kuhu — D1 schema (current, for fresh installs).
+-- Existing databases migrate via migrations/*.sql instead.
+--
 -- Regions are the first-class object; teams are scoped and can nest.
--- v1 runs with one team and one region, but the schema is born knowing better.
+-- Access is by single-use invite link; there are no reusable codes.
 
 CREATE TABLE IF NOT EXISTS teams (
-  id          INTEGER PRIMARY KEY,
-  name        TEXT NOT NULL,
-  parent_id   INTEGER REFERENCES teams(id),
-  invite_code TEXT NOT NULL UNIQUE,           -- how a poster joins; rotate by UPDATE
-  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  id         INTEGER PRIMARY KEY,
+  name       TEXT NOT NULL,
+  parent_id  INTEGER REFERENCES teams(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS regions (
   id      INTEGER PRIMARY KEY,
-  slug    TEXT NOT NULL UNIQUE,               -- e.g. 'ward-3'
+  slug    TEXT NOT NULL UNIQUE,               -- e.g. 'ward-3'; permanent once anyone subscribes
   name_en TEXT NOT NULL,
   name_hi TEXT NOT NULL,
   team_id INTEGER NOT NULL REFERENCES teams(id)
@@ -22,9 +23,29 @@ CREATE TABLE IF NOT EXISTS posters (
   id         INTEGER PRIMARY KEY,
   team_id    INTEGER NOT NULL REFERENCES teams(id),
   name       TEXT NOT NULL,
-  token_hash TEXT NOT NULL UNIQUE,            -- sha256 of the bearer token; token itself is never stored
+  phone      TEXT,                             -- self-declared; the admin knows their own crew
+  role       TEXT NOT NULL DEFAULT 'poster' CHECK (role IN ('poster','admin')),
+  token_hash TEXT NOT NULL UNIQUE,             -- sha256 of the bearer token; the token itself is never stored
+  revoked_at TEXT,                             -- set instead of deleting, so notice history survives
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- A single-use, expiring invite link. Only the hash is stored; the link itself
+-- lives only in the WhatsApp message the admin sent.
+CREATE TABLE IF NOT EXISTS invites (
+  id         INTEGER PRIMARY KEY,
+  token_hash TEXT NOT NULL UNIQUE,
+  team_id    INTEGER NOT NULL REFERENCES teams(id),
+  role       TEXT NOT NULL DEFAULT 'poster' CHECK (role IN ('poster','admin')),
+  note       TEXT,
+  created_by INTEGER REFERENCES posters(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at TEXT NOT NULL,
+  used_at    TEXT,
+  used_by    INTEGER REFERENCES posters(id),
+  revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS invites_team ON invites(team_id, expires_at);
 
 CREATE TABLE IF NOT EXISTS notices (
   id        TEXT PRIMARY KEY,                 -- 'ntc_' + random

@@ -53,9 +53,14 @@ in [docs/concept.md](docs/concept.md).
 - **One PWA, two faces** — a big-button posting screen for the team at `/post`,
   a subscribe screen for everyone else at `/`. Installable, offline-tolerant,
   no app store between a lineman and the publish button.
-- **Invite codes, not OTPs** — a team shares a code; a lineman enters it once
-  per phone and gets a bearer token. Only its hash is stored. No SMS, no DLT
-  paperwork, no per-message cost.
+- **Invite links, not OTPs** — an admin mints a link, shares it on WhatsApp, and
+  it dies the moment it is used (or when it expires, or if they cancel it). The
+  role is decided by the admin before the link exists, so the person joining has
+  nothing to configure. Only hashes are stored. No SMS, no DLT paperwork, no
+  per-message cost.
+- **An admin role** — admins invite and remove people, add areas, and rename
+  them. A team cannot lock itself out: nobody can revoke themselves, and the
+  last admin cannot be removed.
 - **Payloadless web push** — the server tickles the subscription, the service
   worker asks what changed and shows one notification. Notice text never rests
   inside a third-party push service.

@@ -90,13 +90,29 @@ Cloudflare Workers + D1 (+ KV for push subscriptions), one PWA with two faces
 
 **Settled in Season 1:**
 
-- *Auth for posters* → **invite code**, not OTP. A team code is exchanged once
-  per phone for a bearer token; only the token's hash is stored. No SMS cost,
-  no DLT paperwork, and revocation is one `UPDATE`.
+- *Auth for posters* → **single-use invite links**, not OTP and not reusable
+  codes. An admin mints a link with the role baked in, sends it over WhatsApp
+  (which is where this crew already lives), and it dies on first use. The
+  burden sits with the admin, which is the right place for it: they know their
+  own crew, so they are the identity check. Only hashes are stored.
+- *Roles* → `poster` and `admin`. Admins invite, remove, and manage areas. Two
+  server-side invariants stop a team locking itself out: no self-revocation,
+  and the last admin cannot be removed.
+- *Renaming areas* → admins can change display names freely; the slug is
+  immutable because it is in the public API URL and in every subscriber's saved
+  selection.
 - *Subscriber region discovery* → a plain list of regions, chosen as chips.
   Fine at three wards; revisit if a district's worth ever appears at once.
 
 **Still open:**
+
+- Whether posters need a *verified* phone number rather than a self-declared
+  one. Researched 2026-07-27: there is no free SMS OTP for India — DLT
+  registration is mandatory and costs ~₹7,000 one-time before a single message
+  is sent. WhatsApp Cloud API authentication messages (~₹0.13 each, no platform
+  fee, no DLT since it isn't SMS) are the cheap path if verification is ever
+  wanted. At a one-crew scale the admin vouching for people they already know is
+  both free and stronger than an OTP, which only proves possession of a SIM.
 
 - Whether "it's back" notifications are default-on. The `restored` kind exists
   and can be posted, but it spends the one-notification-per-cut budget twice —

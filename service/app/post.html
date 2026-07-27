@@ -25,22 +25,11 @@
 
   <div id="flash" class="flash hidden" role="status"></div>
 
-  <!-- ============ JOIN (invite code) ============ -->
+  <!-- ============ NOT SIGNED IN ============ -->
   <section id="join-view">
     <h1 data-s="join_title">Join your team</h1>
-    <p class="lede" data-s="join_lede"></p>
-
-    <label class="field">
-      <span data-s="invite_code">Invite code</span>
-      <input id="code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" inputmode="text">
-    </label>
-
-    <label class="field">
-      <span data-s="your_name">Your name</span>
-      <input id="name" autocomplete="name">
-    </label>
-
-    <button id="join" class="big" type="button" data-s="join">Join</button>
+    <p class="lede" data-s="join_by_link"></p>
+    <p><a class="sl-link" href="/" data-s="subscribe_link">Subscribe instead</a></p>
   </section>
 
   <!-- ============ POST ============ -->
@@ -76,6 +65,61 @@
 
     <h2 data-s="your_notices">Your recent notices</h2>
     <div id="mine"></div>
+
+    <!-- ============ ADMIN (role=admin only) ============ -->
+    <section id="admin-view" class="hidden">
+      <h2 data-s="admin">Admin</h2>
+
+      <div class="panel">
+        <h3 data-s="invite_someone">Invite someone</h3>
+        <label class="field">
+          <span data-s="invite_as">Joining as</span>
+          <div id="invite-role" class="chips"></div>
+        </label>
+        <label class="field">
+          <span data-s="invite_note">Note to yourself (optional)</span>
+          <input id="invite-note">
+        </label>
+        <label class="field">
+          <span data-s="invite_valid">Link works for</span>
+          <div id="invite-hours" class="chips"></div>
+        </label>
+        <button id="make-invite" class="big" type="button" data-s="make_link">Make invite link</button>
+
+        <div id="invite-result" class="hidden" style="margin-top:1rem">
+          <div class="linkbox" id="invite-url"></div>
+          <button id="share-wa" class="big" type="button" data-s="share_whatsapp">Share on WhatsApp</button>
+          <button id="copy-link" class="big ghost" type="button" data-s="copy_link">Copy link</button>
+        </div>
+      </div>
+
+      <h3 data-s="open_invites">Invite links</h3>
+      <div id="invites"></div>
+
+      <h3 data-s="members">Your team</h3>
+      <div id="members"></div>
+
+      <h3 data-s="areas_admin">Areas</h3>
+      <div id="areas-admin"></div>
+
+      <div class="panel" style="margin-top:1rem">
+        <h3 data-s="add_area">Add an area</h3>
+        <label class="field">
+          <span data-s="area_en">Name in English</span>
+          <input id="new-en">
+        </label>
+        <label class="field">
+          <span data-s="area_hi">नाम (हिंदी)</span>
+          <input id="new-hi">
+        </label>
+        <label class="field">
+          <span data-s="area_slug">Short id (permanent)</span>
+          <input id="new-slug" autocapitalize="none" spellcheck="false">
+          <small class="hint" data-s="area_slug_help"></small>
+        </label>
+        <button id="add-area" class="big" type="button" data-s="save_area">Add area</button>
+      </div>
+    </section>
 
     <p style="margin-top:2rem">
       <button id="signout" class="big ghost" type="button" data-s="sign_out">Sign out of this phone</button>

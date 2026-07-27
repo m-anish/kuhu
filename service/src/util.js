@@ -13,6 +13,7 @@ export function json(data, status = 200, extraHeaders = {}) {
 
 export function badRequest(msg) { return json({ error: msg }, 400); }
 export function unauthorized() { return json({ error: 'unauthorized' }, 401); }
+export function forbidden(msg = 'forbidden') { return json({ error: msg }, 403); }
 export function notFound() { return json({ error: 'not_found' }, 404); }
 
 export function corsPreflight() {

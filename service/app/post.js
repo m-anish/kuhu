@@ -6,8 +6,11 @@ import { STRINGS, REASONS, pickLang, setLang, fmtWindow, localToIso, isoToLocalI
 let lang = pickLang();
 let token = localStorage.getItem('kuhu.token') || '';
 let team = localStorage.getItem('kuhu.team') || '';
+let role = localStorage.getItem('kuhu.role') || 'poster';
 let areas = [];
 let sel = { region: null, kind: 'cut', reason: null };
+let inviteSel = { role: 'poster', hours: 48 };
+let lastInviteUrl = '';
 
 const $ = (s) => document.querySelector(s);
 const flash = $('#flash');
@@ -45,33 +48,15 @@ async function api(path, options = {}) {
   return res;
 }
 
-// ---------- join ----------
-
-async function join() {
-  const code = $('#code').value.trim();
-  const name = $('#name').value.trim();
-  if (!code || !name) return say(t('bad_code'), 'bad');
-  const res = await fetch('/api/auth/claim', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ code, name }),
-  });
-  if (!res.ok) return say(t('bad_code'), 'bad');
-  const data = await res.json();
-  token = data.token;
-  team = data.team;
-  localStorage.setItem('kuhu.token', token);
-  localStorage.setItem('kuhu.team', team);
-  areas = data.regions || [];
-  flash.className = 'flash hidden';
-  showPostView();
-}
+// ---------- session ----------
 
 function signOut() {
   localStorage.removeItem('kuhu.token');
   localStorage.removeItem('kuhu.team');
-  token = ''; team = '';
+  localStorage.removeItem('kuhu.role');
+  token = ''; team = ''; role = 'poster';
   $('#post-view').classList.add('hidden');
+  $('#admin-view').classList.add('hidden');
   $('#join-view').classList.remove('hidden');
   paintStrings();
 }
@@ -81,18 +66,30 @@ function signOut() {
 async function showPostView() {
   $('#join-view').classList.add('hidden');
   $('#post-view').classList.remove('hidden');
+
+  const res = await api('/api/me');
+  if (!res.ok) return signOut();
+  const me = await res.json();
+  areas = me.regions || [];
+  role = me.role;
+  team = team || '';
+  localStorage.setItem('kuhu.role', role);
+
   paintStrings();
-  if (areas.length === 0) {
-    const res = await api('/api/team/regions');
-    if (!res.ok) return signOut();
-    areas = (await res.json()).regions || [];
-  }
   paintAreas();
   paintKinds();
   paintQuick();
   paintReasons();
   defaultWindow();
   loadMine();
+
+  $('#admin-view').classList.toggle('hidden', role !== 'admin');
+  if (role === 'admin') {
+    paintInviteControls();
+    loadInvites();
+    loadMembers();
+    paintAreasAdmin();
+  }
 }
 
 function paintAreas() {
@@ -258,19 +255,264 @@ async function loadMine() {
   }
 }
 
+// ---------- admin: invites ----------
+
+function paintInviteControls() {
+  const roleBox = $('#invite-role');
+  roleBox.textContent = '';
+  for (const r of ['poster', 'admin']) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.textContent = t(r === 'admin' ? 'role_admin' : 'role_poster');
+    b.setAttribute('aria-pressed', String(inviteSel.role === r));
+    b.addEventListener('click', () => { inviteSel.role = r; paintInviteControls(); });
+    roleBox.append(b);
+  }
+  const hoursBox = $('#invite-hours');
+  hoursBox.textContent = '';
+  for (const h of [24, 48, 168]) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.textContent = t(`hours_${h}`);
+    b.setAttribute('aria-pressed', String(inviteSel.hours === h));
+    b.addEventListener('click', () => { inviteSel.hours = h; paintInviteControls(); });
+    hoursBox.append(b);
+  }
+}
+
+async function makeInvite() {
+  const btn = $('#make-invite');
+  btn.disabled = true;
+  try {
+    const res = await api('/api/invites', {
+      method: 'POST',
+      body: JSON.stringify({ role: inviteSel.role, hours: inviteSel.hours, note: $('#invite-note').value.trim() }),
+    });
+    if (!res.ok) return say((await res.json().catch(() => ({}))).error || 'error', 'bad');
+    const data = await res.json();
+    lastInviteUrl = data.url;
+    $('#invite-url').textContent = data.url;
+    $('#invite-result').classList.remove('hidden');
+    $('#invite-note').value = '';
+    say(t('link_ready'), 'ok');
+    loadInvites();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function waMessage() {
+  return t('wa_message').replace('{team}', team).replace('{url}', lastInviteUrl);
+}
+
+async function shareInvite() {
+  if (!lastInviteUrl) return;
+  // The Web Share API gives the real WhatsApp share sheet on a phone; wa.me is
+  // the desktop-and-everything-else fallback.
+  if (navigator.share) {
+    try { await navigator.share({ text: waMessage() }); return; } catch { /* cancelled */ }
+  }
+  window.open(`https://wa.me/?text=${encodeURIComponent(waMessage())}`, '_blank', 'noopener');
+}
+
+async function copyInvite() {
+  if (!lastInviteUrl) return;
+  try {
+    await navigator.clipboard.writeText(lastInviteUrl);
+    say(t('copied'), 'ok');
+  } catch {
+    say(lastInviteUrl, 'ok');
+  }
+}
+
+async function loadInvites() {
+  const box = $('#invites');
+  const res = await api('/api/invites');
+  if (!res.ok) return;
+  const { invites } = await res.json();
+  box.textContent = '';
+  const live = invites.filter((i) => i.state !== 'expired');
+  if (live.length === 0) { box.innerHTML = `<p class="empty">${escapeHtml(t('no_invites'))}</p>`; return; }
+  for (const i of live) {
+    const el = document.createElement('div');
+    el.className = 'row';
+    const who = i.state === 'used' && i.used_by_name ? ` · ${i.used_by_name}` : '';
+    el.innerHTML = `
+      <div>
+        <strong>${escapeHtml(i.note || t(i.role === 'admin' ? 'role_admin' : 'role_poster'))}</strong>
+        <div class="sub">${escapeHtml(t(`state_${i.state}`))}${escapeHtml(who)}</div>
+      </div>`;
+    if (i.state === 'open') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'mini';
+      btn.textContent = t('revoke');
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        const r = await api(`/api/invites/${i.id}/revoke`, { method: 'POST' });
+        if (r.ok) loadInvites(); else btn.disabled = false;
+      });
+      el.append(btn);
+    }
+    box.append(el);
+  }
+}
+
+// ---------- admin: members ----------
+
+async function loadMembers() {
+  const box = $('#members');
+  const res = await api('/api/team/members');
+  if (!res.ok) return;
+  const { members } = await res.json();
+  box.textContent = '';
+  for (const m of members) {
+    const el = document.createElement('div');
+    el.className = `row${m.revoked_at ? ' dim' : ''}`;
+    const bits = [t(m.role === 'admin' ? 'role_admin' : 'role_poster')];
+    if (m.phone) bits.push(m.phone);
+    if (m.revoked_at) bits.push(t('state_revoked'));
+    el.innerHTML = `
+      <div>
+        <strong>${escapeHtml(m.name)}${m.is_you ? ' ·' : ''}</strong>
+        <div class="sub">${escapeHtml(bits.join(' · '))}</div>
+      </div>`;
+    if (!m.revoked_at && !m.is_you) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'mini';
+      btn.textContent = t('remove_member');
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        const r = await api(`/api/team/members/${m.id}/revoke`, { method: 'POST' });
+        if (r.ok) { say(t('removed_ok'), 'ok'); loadMembers(); }
+        else {
+          const err = await r.json().catch(() => ({}));
+          say(err.error === 'that is the last admin' ? t('last_admin') : (err.error || 'error'), 'bad');
+          btn.disabled = false;
+        }
+      });
+      el.append(btn);
+    }
+    box.append(el);
+  }
+}
+
+// ---------- admin: areas ----------
+
+function paintAreasAdmin() {
+  const box = $('#areas-admin');
+  box.textContent = '';
+  for (const a of areas) {
+    const el = document.createElement('div');
+    el.className = 'row';
+    el.innerHTML = `
+      <div>
+        <strong>${escapeHtml(lang === 'hi' ? a.name_hi : a.name_en)}</strong>
+        <div class="sub"><code>${escapeHtml(a.slug)}</code></div>
+      </div>`;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'mini';
+    btn.textContent = t('rename');
+    btn.addEventListener('click', () => renameArea(a, el));
+    el.append(btn);
+    box.append(el);
+  }
+}
+
+function renameArea(area, row) {
+  if (row.querySelector('.rename-form')) return;
+  const form = document.createElement('div');
+  form.className = 'rename-form';
+  form.innerHTML = `
+    <label class="field"><span>${escapeHtml(t('area_en'))}</span>
+      <input class="r-en" value="${escapeHtml(area.name_en)}"></label>
+    <label class="field"><span>${escapeHtml(t('area_hi'))}</span>
+      <input class="r-hi" value="${escapeHtml(area.name_hi)}"></label>
+    <small class="hint">${escapeHtml(t('slug_fixed'))}</small>`;
+  const save = document.createElement('button');
+  save.type = 'button';
+  save.className = 'big';
+  save.style.marginTop = '0.6rem';
+  save.textContent = t('rename');
+  save.addEventListener('click', async () => {
+    save.disabled = true;
+    const res = await api(`/api/regions/${area.slug}/rename`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name_en: form.querySelector('.r-en').value.trim(),
+        name_hi: form.querySelector('.r-hi').value.trim(),
+      }),
+    });
+    if (!res.ok) { say((await res.json().catch(() => ({}))).error || 'error', 'bad'); save.disabled = false; return; }
+    const updated = await res.json();
+    Object.assign(area, updated);
+    say(t('rename_saved'), 'ok');
+    paintAreas();
+    paintAreasAdmin();
+  });
+  form.append(save);
+  row.append(form);
+}
+
+/** Suggest a slug from the English name, but let the admin overrule it. */
+function suggestSlug() {
+  const slugField = $('#new-slug');
+  if (slugField.dataset.touched === '1') return;
+  slugField.value = $('#new-en').value.trim().toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 39);
+}
+
+async function addArea() {
+  const btn = $('#add-area');
+  btn.disabled = true;
+  try {
+    const res = await api('/api/regions', {
+      method: 'POST',
+      body: JSON.stringify({
+        slug: $('#new-slug').value.trim().toLowerCase(),
+        name_en: $('#new-en').value.trim(),
+        name_hi: $('#new-hi').value.trim(),
+      }),
+    });
+    if (!res.ok) return say((await res.json().catch(() => ({}))).error || 'error', 'bad');
+    const added = await res.json();
+    areas.push(added);
+    areas.sort((a, b) => a.slug.localeCompare(b.slug));
+    $('#new-en').value = ''; $('#new-hi').value = ''; $('#new-slug').value = '';
+    $('#new-slug').dataset.touched = '';
+    say(t('area_added'), 'ok');
+    paintAreas();
+    paintAreasAdmin();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // ---------- wiring ----------
 
 for (const b of document.querySelectorAll('.lang button')) {
   b.addEventListener('click', () => {
     lang = b.dataset.lang;
     paintStrings();
-    if (token) { paintAreas(); paintKinds(); paintQuick(); paintReasons(); loadMine(); }
+    if (token) {
+      paintAreas(); paintKinds(); paintQuick(); paintReasons(); loadMine();
+      if (role === 'admin') { paintInviteControls(); loadInvites(); loadMembers(); paintAreasAdmin(); }
+    }
   });
 }
 
-$('#join').addEventListener('click', join);
 $('#publish').addEventListener('click', publish);
 $('#signout').addEventListener('click', signOut);
+$('#make-invite').addEventListener('click', makeInvite);
+$('#share-wa').addEventListener('click', shareInvite);
+$('#copy-link').addEventListener('click', copyInvite);
+$('#add-area').addEventListener('click', addArea);
+$('#new-en').addEventListener('input', suggestSlug);
+$('#new-slug').addEventListener('input', (e) => { e.target.dataset.touched = '1'; });
 
 paintStrings();
 if (token) {

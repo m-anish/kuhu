@@ -1,20 +1,38 @@
 // kuhu — the service. Cloudflare Worker + D1.
-// API surface (all JSON, CORS-open on GET):
 //
+// Public:
 //   GET  /api/regions                      list regions
 //   GET  /api/regions/:slug/next-cuts      upcoming notices for one region (cacheable)
 //   GET  /api/vapid-key                    the push public key
-//   POST /api/auth/claim                   invite code + name → poster token
-//   POST /api/notices                      publish a notice           (Bearer)
-//   POST /api/notices/:id/cancel           cancel a notice            (Bearer)
-//   GET  /api/team/regions                 regions this poster may post to (Bearer)
-//   GET  /api/team/notices                 team's upcoming notices    (Bearer)
-//   POST /api/subscriptions                create/replace a push subscription
-//   DELETE /api/subscriptions              remove one (by endpoint)
-//   POST /api/subscriptions/pending        what the service worker asks on push
+//   GET  /api/invites/preview?t=…          who is inviting me, and as what
+//   POST /api/invites/redeem               {token, name, phone} → poster token
+//
+// Poster (Bearer):
+//   POST /api/notices                      publish
+//   POST /api/notices/:id/cancel
+//   GET  /api/team/regions                 regions this poster may post to
+//   GET  /api/team/notices                 the team's recent notices
+//   GET  /api/me                           who am I, and what may I do
+//
+// Admin (Bearer, role=admin):
+//   POST /api/invites                      mint a single-use link
+//   GET  /api/invites                      outstanding + recently used
+//   POST /api/invites/:id/revoke
+//   GET  /api/team/members
+//   POST /api/team/members/:id/revoke
+//   POST /api/regions                      add an area
+//   POST /api/regions/:slug/rename         rename an area (display names only)
+//
+// Subscriber:
+//   POST   /api/subscriptions
+//   DELETE /api/subscriptions
+//   POST   /api/subscriptions/pending
 
-import { json, badRequest, unauthorized, notFound, corsPreflight, randomId, randomToken, sha256hex, isIsoDate } from './util.js';
+import { json, badRequest, unauthorized, forbidden, notFound, corsPreflight, randomId, randomToken, sha256hex, isIsoDate } from './util.js';
 import { notifyRegion } from './push.js';
+
+const ROLES = ['poster', 'admin'];
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,38}$/;
 
 export default {
   async fetch(request, env, ctx) {
@@ -35,7 +53,8 @@ async function route(request, env, ctx, url) {
   const path = url.pathname.replace(/\/+$/, '');
   const method = request.method;
 
-  // ---------- public: regions ----------
+  // ───────────────────────── public ─────────────────────────
+
   if (method === 'GET' && path === '/api/regions') {
     const { results } = await db.prepare(
       'SELECT slug, name_en, name_hi FROM regions ORDER BY slug',
@@ -65,89 +84,248 @@ async function route(request, env, ctx, url) {
     return json({ key: env.VAPID_PUBLIC_KEY }, 200, { 'cache-control': 'public, max-age=86400' });
   }
 
-  // ---------- posters: claim + publish ----------
-  if (method === 'POST' && path === '/api/auth/claim') {
-    const body = await request.json().catch(() => null);
-    const code = (body?.code || '').trim();
-    const name = (body?.name || '').trim().slice(0, 60);
-    if (!code || !name) return badRequest('code and name are required');
-    const team = await db.prepare(
-      'SELECT id, name FROM teams WHERE invite_code = ?1',
-    ).bind(code).first();
-    if (!team) return unauthorized();
-    const token = randomToken();
-    await db.prepare(
-      'INSERT INTO posters (team_id, name, token_hash) VALUES (?1, ?2, ?3)',
-    ).bind(team.id, name, await sha256hex(token)).run();
-    const regions = (await teamRegions(db, team.id)).map(({ slug, name_en, name_hi }) => ({ slug, name_en, name_hi }));
-    return json({ token, team: team.name, regions });
+  // ───────────────────────── invites ─────────────────────────
+
+  // What a tapped link shows before anyone commits to anything.
+  if (method === 'GET' && path === '/api/invites/preview') {
+    const invite = await liveInvite(db, url.searchParams.get('t') || '');
+    if (!invite) return json({ valid: false }, 404);
+    const team = await db.prepare('SELECT name FROM teams WHERE id = ?1').bind(invite.team_id).first();
+    return json({ valid: true, team: team?.name ?? '', role: invite.role, expires_at: invite.expires_at });
   }
 
-  // Everything below on the poster side needs a token.
+  if (method === 'POST' && path === '/api/invites/redeem') {
+    const body = await request.json().catch(() => null);
+    const name = (body?.name || '').trim().slice(0, 60);
+    const phone = (body?.phone || '').trim().slice(0, 20) || null;
+    if (!name) return badRequest('a name is required');
+
+    const invite = await liveInvite(db, body?.token || '');
+    if (!invite) return json({ error: 'invite_invalid' }, 401);
+
+    const token = randomToken();
+    await db.prepare(
+      'INSERT INTO posters (team_id, name, phone, role, token_hash) VALUES (?1, ?2, ?3, ?4, ?5)',
+    ).bind(invite.team_id, name, phone, invite.role, await sha256hex(token)).run();
+    const poster = await db.prepare('SELECT id FROM posters WHERE token_hash = ?1')
+      .bind(await sha256hex(token)).first();
+
+    // Burn it. An invite dies on use, not merely on expiry.
+    await db.prepare(
+      "UPDATE invites SET used_at = datetime('now'), used_by = ?2 WHERE id = ?1",
+    ).bind(invite.id, poster.id).run();
+
+    const team = await db.prepare('SELECT name FROM teams WHERE id = ?1').bind(invite.team_id).first();
+    return json({ token, team: team?.name ?? '', role: invite.role, name });
+  }
+
+  // ───────────────────────── poster ─────────────────────────
+
+  const me = await authPoster(db, request);
+
+  if (method === 'GET' && path === '/api/me') {
+    if (!me) return unauthorized();
+    return json({
+      name: me.name,
+      role: me.role,
+      team_id: me.team_id,
+      regions: publicRegions(await scopedRegions(db, me.team_id)),
+    });
+  }
+
+  if (method === 'GET' && path === '/api/team/regions') {
+    if (!me) return unauthorized();
+    return json({ poster: me.name, role: me.role, regions: publicRegions(await scopedRegions(db, me.team_id)) });
+  }
+
   if (method === 'POST' && path === '/api/notices') {
-    const poster = await authPoster(db, request);
-    if (!poster) return unauthorized();
+    if (!me) return unauthorized();
     const body = await request.json().catch(() => null);
     if (!body) return badRequest('invalid json');
     const { region: slug, from, to, kind = 'cut' } = body;
-    let { reason_en = '', reason_hi = '' } = body;
-    reason_en = String(reason_en).trim().slice(0, 200);
-    reason_hi = String(reason_hi).trim().slice(0, 200);
+    const reason_en = String(body.reason_en ?? '').trim().slice(0, 200);
+    const reason_hi = String(body.reason_hi ?? '').trim().slice(0, 200);
     if (!['cut', 'advisory', 'restored'].includes(kind)) return badRequest('bad kind');
     if (!isIsoDate(from) || !isIsoDate(to) || Date.parse(from) >= Date.parse(to)) {
       return badRequest('bad window');
     }
     if (!reason_en && !reason_hi) return badRequest('a reason, in either language');
-    const region = (await teamRegions(db, poster.team_id)).find((r) => r.slug === slug);
-    if (!region) return unauthorized();
+    const region = (await scopedRegions(db, me.team_id)).find((r) => r.slug === slug);
+    if (!region) return forbidden('not your area');
     const id = randomId('ntc');
     await db.prepare(
       `INSERT INTO notices (id, region_id, kind, win_from, win_to, reason_en, reason_hi, posted_by)
        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
-    ).bind(id, region.id, kind, from, to, reason_en, reason_hi, poster.id).run();
+    ).bind(id, region.id, kind, from, to, reason_en, reason_hi, me.id).run();
     ctx.waitUntil(notifyRegion(db, env, region.id));
     return json({ id, status: 'scheduled' }, 201);
   }
 
   const cancel = path.match(/^\/api\/notices\/(ntc_[a-z0-9]+)\/cancel$/);
   if (method === 'POST' && cancel) {
-    const poster = await authPoster(db, request);
-    if (!poster) return unauthorized();
+    if (!me) return unauthorized();
     const notice = await db.prepare(
-      'SELECT id, region_id FROM notices WHERE id = ?1 AND status = ?2',
-    ).bind(cancel[1], 'scheduled').first();
+      "SELECT id, region_id FROM notices WHERE id = ?1 AND status = 'scheduled'",
+    ).bind(cancel[1]).first();
     if (!notice) return notFound();
-    const allowed = (await teamRegions(db, poster.team_id)).some((r) => r.id === notice.region_id);
-    if (!allowed) return unauthorized();
+    const allowed = (await scopedRegions(db, me.team_id)).some((r) => r.id === notice.region_id);
+    if (!allowed) return forbidden('not your area');
     await db.prepare("UPDATE notices SET status = 'cancelled' WHERE id = ?1").bind(notice.id).run();
     ctx.waitUntil(notifyRegion(db, env, notice.region_id));
     return json({ id: notice.id, status: 'cancelled' });
   }
 
-  if (method === 'GET' && path === '/api/team/regions') {
-    const poster = await authPoster(db, request);
-    if (!poster) return unauthorized();
-    const regions = (await teamRegions(db, poster.team_id)).map(({ slug, name_en, name_hi }) => ({ slug, name_en, name_hi }));
-    return json({ team_id: poster.team_id, poster: poster.name, regions });
-  }
-
   if (method === 'GET' && path === '/api/team/notices') {
-    const poster = await authPoster(db, request);
-    if (!poster) return unauthorized();
-    const regions = await teamRegions(db, poster.team_id);
+    if (!me) return unauthorized();
+    const regions = await scopedRegions(db, me.team_id);
     if (regions.length === 0) return json({ notices: [] });
     const marks = regions.map((_, i) => `?${i + 1}`).join(',');
     const { results } = await db.prepare(
       `SELECT n.id, n.kind, n.win_from, n.win_to, n.reason_en, n.reason_hi, n.status, n.posted_at,
-              r.slug AS region_slug, r.name_en AS region_en, r.name_hi AS region_hi
-       FROM notices n JOIN regions r ON r.id = n.region_id
+              r.slug AS region_slug, r.name_en AS region_en, r.name_hi AS region_hi,
+              p.name AS poster_name
+       FROM notices n
+       JOIN regions r ON r.id = n.region_id
+       LEFT JOIN posters p ON p.id = n.posted_by
        WHERE n.region_id IN (${marks}) AND datetime(n.win_to) > datetime('now', '-1 day')
        ORDER BY datetime(n.win_from) DESC LIMIT 50`,
     ).bind(...regions.map((r) => r.id)).all();
-    return json({ notices: results.map((n) => ({ ...publicNotice(n), region: { slug: n.region_slug, name_en: n.region_en, name_hi: n.region_hi } })) });
+    return json({
+      notices: results.map((n) => ({
+        ...publicNotice(n),
+        by: n.poster_name,
+        region: { slug: n.region_slug, name_en: n.region_en, name_hi: n.region_hi },
+      })),
+    });
   }
 
-  // ---------- subscribers ----------
+  // ───────────────────────── admin ─────────────────────────
+
+  if (method === 'POST' && path === '/api/invites') {
+    if (!me) return unauthorized();
+    if (me.role !== 'admin') return forbidden('admin only');
+    const body = await request.json().catch(() => null);
+    const role = ROLES.includes(body?.role) ? body.role : 'poster';
+    const note = (body?.note || '').trim().slice(0, 80) || null;
+    const hours = Math.min(Math.max(parseInt(body?.hours, 10) || 48, 1), 336);   // 1h … 14d
+    const token = randomToken();
+    await db.prepare(
+      `INSERT INTO invites (token_hash, team_id, role, note, created_by, expires_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, datetime('now', ?6))`,
+    ).bind(await sha256hex(token), me.team_id, role, note, me.id, `+${hours} hours`).run();
+    const row = await db.prepare('SELECT id, expires_at FROM invites WHERE token_hash = ?1')
+      .bind(await sha256hex(token)).first();
+    return json({
+      id: row.id,
+      url: `${publicOrigin(url)}/join#t=${token}`,
+      role,
+      note,
+      expires_at: row.expires_at,
+    }, 201);
+  }
+
+  if (method === 'GET' && path === '/api/invites') {
+    if (!me) return unauthorized();
+    if (me.role !== 'admin') return forbidden('admin only');
+    const { results } = await db.prepare(
+      `SELECT i.id, i.role, i.note, i.created_at, i.expires_at, i.used_at, i.revoked_at,
+              p.name AS used_by_name
+       FROM invites i
+       LEFT JOIN posters p ON p.id = i.used_by
+       WHERE i.team_id = ?1 AND datetime(i.created_at) > datetime('now', '-30 days')
+       ORDER BY i.created_at DESC LIMIT 40`,
+    ).bind(me.team_id).all();
+    const now = Date.now();
+    return json({
+      invites: results.map((i) => ({
+        ...i,
+        state: i.revoked_at ? 'revoked'
+          : i.used_at ? 'used'
+          : Date.parse(i.expires_at.replace(' ', 'T') + 'Z') < now ? 'expired'
+          : 'open',
+      })),
+    });
+  }
+
+  const revokeInvite = path.match(/^\/api\/invites\/(\d+)\/revoke$/);
+  if (method === 'POST' && revokeInvite) {
+    if (!me) return unauthorized();
+    if (me.role !== 'admin') return forbidden('admin only');
+    const res = await db.prepare(
+      `UPDATE invites SET revoked_at = datetime('now')
+       WHERE id = ?1 AND team_id = ?2 AND used_at IS NULL AND revoked_at IS NULL`,
+    ).bind(revokeInvite[1], me.team_id).run();
+    if (!res.meta.changes) return notFound();
+    return json({ id: Number(revokeInvite[1]), state: 'revoked' });
+  }
+
+  if (method === 'GET' && path === '/api/team/members') {
+    if (!me) return unauthorized();
+    if (me.role !== 'admin') return forbidden('admin only');
+    const { results } = await db.prepare(
+      `SELECT id, name, phone, role, created_at, revoked_at
+       FROM posters WHERE team_id = ?1 ORDER BY revoked_at IS NOT NULL, created_at`,
+    ).bind(me.team_id).all();
+    return json({ members: results.map((m) => ({ ...m, is_you: m.id === me.id })) });
+  }
+
+  const revokeMember = path.match(/^\/api\/team\/members\/(\d+)\/revoke$/);
+  if (method === 'POST' && revokeMember) {
+    if (!me) return unauthorized();
+    if (me.role !== 'admin') return forbidden('admin only');
+    const id = Number(revokeMember[1]);
+    if (id === me.id) return badRequest('you cannot revoke yourself');
+    // Don't strand the team: refuse to remove the last working admin.
+    const target = await db.prepare(
+      'SELECT id, role FROM posters WHERE id = ?1 AND team_id = ?2 AND revoked_at IS NULL',
+    ).bind(id, me.team_id).first();
+    if (!target) return notFound();
+    if (target.role === 'admin') {
+      const { count } = await db.prepare(
+        "SELECT COUNT(*) AS count FROM posters WHERE team_id = ?1 AND role = 'admin' AND revoked_at IS NULL",
+      ).bind(me.team_id).first();
+      if (count <= 1) return badRequest('that is the last admin');
+    }
+    await db.prepare("UPDATE posters SET revoked_at = datetime('now') WHERE id = ?1").bind(id).run();
+    return json({ id, state: 'revoked' });
+  }
+
+  if (method === 'POST' && path === '/api/regions') {
+    if (!me) return unauthorized();
+    if (me.role !== 'admin') return forbidden('admin only');
+    const body = await request.json().catch(() => null);
+    const slug = (body?.slug || '').trim().toLowerCase();
+    const name_en = (body?.name_en || '').trim().slice(0, 60);
+    const name_hi = (body?.name_hi || '').trim().slice(0, 60);
+    if (!SLUG_RE.test(slug)) return badRequest('slug: a-z, 0-9 and hyphens');
+    if (!name_en || !name_hi) return badRequest('both names are required');
+    const clash = await db.prepare('SELECT id FROM regions WHERE slug = ?1').bind(slug).first();
+    if (clash) return badRequest('that slug already exists');
+    await db.prepare(
+      'INSERT INTO regions (slug, name_en, name_hi, team_id) VALUES (?1, ?2, ?3, ?4)',
+    ).bind(slug, name_en, name_hi, me.team_id).run();
+    return json({ slug, name_en, name_hi }, 201);
+  }
+
+  // Display names only. The slug is load-bearing — it is in the public API URL
+  // and in every subscriber's saved selection — so it is deliberately immutable.
+  const rename = path.match(/^\/api\/regions\/([a-z0-9-]+)\/rename$/);
+  if (method === 'POST' && rename) {
+    if (!me) return unauthorized();
+    if (me.role !== 'admin') return forbidden('admin only');
+    const body = await request.json().catch(() => null);
+    const name_en = (body?.name_en || '').trim().slice(0, 60);
+    const name_hi = (body?.name_hi || '').trim().slice(0, 60);
+    if (!name_en || !name_hi) return badRequest('both names are required');
+    const region = (await scopedRegions(db, me.team_id)).find((r) => r.slug === rename[1]);
+    if (!region) return forbidden('not your area');
+    await db.prepare('UPDATE regions SET name_en = ?2, name_hi = ?3 WHERE id = ?1')
+      .bind(region.id, name_en, name_hi).run();
+    return json({ slug: region.slug, name_en, name_hi });
+  }
+
+  // ───────────────────────── subscribers ─────────────────────────
+
   if (method === 'POST' && path === '/api/subscriptions') {
     const body = await request.json().catch(() => null);
     const endpoint = body?.endpoint;
@@ -204,7 +382,22 @@ async function route(request, env, ctx, url) {
   return notFound();
 }
 
-// ---------- helpers ----------
+// ───────────────────────── helpers ─────────────────────────
+
+/**
+ * The origin to put inside an invite link. Never emit http:// for a real host —
+ * the link gets pasted into WhatsApp, and a scheme downgrade there is a
+ * downgrade for everyone who taps it. Localhost stays http for dev.
+ */
+function publicOrigin(url) {
+  const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+  return local ? url.origin : `https://${url.host}`;
+}
+
+/** Regions as the client needs them — internal ids stay server-side. */
+function publicRegions(regions) {
+  return regions.map(({ slug, name_en, name_hi }) => ({ slug, name_en, name_hi }));
+}
 
 function publicNotice(n) {
   return {
@@ -223,12 +416,23 @@ async function authPoster(db, request) {
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (!token) return null;
   return db.prepare(
-    'SELECT id, team_id, name FROM posters WHERE token_hash = ?1',
+    'SELECT id, team_id, name, role FROM posters WHERE token_hash = ?1 AND revoked_at IS NULL',
   ).bind(await sha256hex(token)).first();
 }
 
-/** A team can post to its own regions and those of every descendant team. */
-async function teamRegions(db, teamId) {
+/** An invite that is unused, unrevoked, and not yet expired. Anything else is nothing. */
+async function liveInvite(db, token) {
+  if (!token || typeof token !== 'string') return null;
+  return db.prepare(
+    `SELECT id, team_id, role, expires_at FROM invites
+     WHERE token_hash = ?1
+       AND used_at IS NULL AND revoked_at IS NULL
+       AND datetime(expires_at) > datetime('now')`,
+  ).bind(await sha256hex(token)).first();
+}
+
+/** A team's own regions plus every descendant team's. */
+async function scopedRegions(db, teamId) {
   const { results } = await db.prepare(
     `WITH RECURSIVE tree(id) AS (
        SELECT ?1

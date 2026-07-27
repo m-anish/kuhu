@@ -6,10 +6,10 @@
 // a third-party push service, and the payload cannot go stale between send
 // and delivery.
 
-const CACHE = 'kuhu-shell-v1';
+const CACHE = 'kuhu-shell-v2';
 // Canonical paths only — the asset server redirects /index.html and /post.html
 // to these, and a cached redirect is worse than no cache at all.
-const SHELL = ['/', '/post', '/app.css', '/i18n.js', '/subscribe.js', '/post.js', '/icon.svg', '/icon-192.png'];
+const SHELL = ['/', '/post', '/join', '/app.css', '/i18n.js', '/subscribe.js', '/post.js', '/join.js', '/icon.svg', '/icon-192.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -23,14 +23,18 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Network-first for the API, cache-first for the shell. The shell should open
-// on a dead connection; the notices should never be stale when there is one.
+// Three strategies, because the three kinds of request want different things.
+//
+// A plain cache-first shell was a trap: with a fixed cache name, a deployed
+// phone would serve its cached JS forever and never see a fix. Everything below
+// self-heals instead — the worst case is that an update lands one load late.
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  // API: network-first. A stale notice is worse than no notice.
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(fetch(request).catch(() => new Response('{"offline":true}', {
       status: 503, headers: { 'content-type': 'application/json' },
@@ -38,9 +42,34 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  event.respondWith(
-    caches.match(request, { ignoreSearch: true }).then((hit) => hit || fetch(request)),
-  );
+  // Pages: network-first, falling back to cache so the app still opens on a
+  // dead connection.
+  if (request.mode === 'navigate') {
+    event.respondWith((async () => {
+      try {
+        const fresh = await fetch(request);
+        const cache = await caches.open(CACHE);
+        cache.put(request, fresh.clone());
+        return fresh;
+      } catch {
+        return (await caches.match(request, { ignoreSearch: true }))
+          || (await caches.match('/'))
+          || Response.error();
+      }
+    })());
+    return;
+  }
+
+  // Assets: stale-while-revalidate. Instant from cache, refreshed behind it.
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    const hit = await cache.match(request, { ignoreSearch: true });
+    const network = fetch(request).then((res) => {
+      if (res && res.ok) cache.put(request, res.clone());
+      return res;
+    }).catch(() => null);
+    return hit || (await network) || Response.error();
+  })());
 });
 
 const IST = 'Asia/Kolkata';

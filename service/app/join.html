@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>kuhu — join your team</title>
+<meta name="theme-color" content="#0c0f0c">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <img src="/icon.svg" alt="" aria-hidden="true">
+    <b>kuhu</b>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" data-lang="en" aria-pressed="true">English</button>
+      <button type="button" data-lang="hi" aria-pressed="false">हिंदी</button>
+    </div>
+  </header>
+
+  <div id="flash" class="flash hidden" role="status"></div>
+
+  <!-- link is being checked -->
+  <section id="checking">
+    <p class="empty" data-s="checking">Checking the link…</p>
+  </section>
+
+  <!-- link is no good -->
+  <section id="dead" class="hidden">
+    <h1 data-s="link_dead_title">This link no longer works.</h1>
+    <p class="lede" data-s="link_dead_body"></p>
+  </section>
+
+  <!-- link is good -->
+  <section id="ok" class="hidden">
+    <h1 id="invite-head"></h1>
+    <p class="lede" data-s="join_lede2"></p>
+
+    <label class="field">
+      <span data-s="your_name">Your name</span>
+      <input id="name" autocomplete="name" enterkeyhint="done">
+    </label>
+
+    <label class="field">
+      <span data-s="your_phone">Phone number (optional)</span>
+      <input id="phone" type="tel" autocomplete="tel" inputmode="tel">
+    </label>
+
+    <button id="join" class="big" type="button" data-s="join">Join</button>
+  </section>
+
+  <div class="foot">
+    <a href="/" data-s="subscribe_link">Subscribe instead</a>
+  </div>
+
+</div>
+<script type="module" src="/join.js"></script>
+</body>
+</html>

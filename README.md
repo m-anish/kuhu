@@ -66,7 +66,7 @@ Details, endpoints, and deployment: [service/README.md](service/README.md).
 ## Status
 
 **Season 1 · First call.** The service is built and deployed at
-[kuhu-app.anishmg.workers.dev](https://kuhu-app.anishmg.workers.dev): posting,
+[kuhuapp.starstucklab.com](https://kuhuapp.starstucklab.com): posting,
 subscribing, cancelling, the public API, and the region/team hierarchy all work
 end to end. What it does not yet have is a real crew using it, MQTT publishing,
 or a Telegram mirror. One notice has been posted, by its author, to a ward that

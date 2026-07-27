@@ -3,6 +3,18 @@ name = "kuhu-app"
 main = "src/index.js"
 compatibility_date = "2026-07-01"
 
+# Keep the workers.dev hostname alive. NOTE: adding `routes` while this is
+# absent silently DISABLES workers.dev — always set it explicitly.
+workers_dev = true
+
+# A Worker attaches to a hostname by a custom-domain binding, which also gets
+# Cloudflare to issue a certificate for it. A hand-made CNAME to *.workers.dev
+# does NOT do this — it resolves, then 522s, with no cert. One label deep on
+# purpose: free-plan certificates don't cover app.kuhu.starstucklab.com.
+routes = [
+  { pattern = "kuhuapp.starstucklab.com", custom_domain = true }
+]
+
 # The PWA (both faces) is served from ./app; /api/* always hits the worker.
 [assets]
 directory = "./app"

@@ -37,7 +37,7 @@ which lives at `../starstucklab` on disk alongside the sibling spokes
   https://kuhu.starstucklab.com (DNS/Pages setup is handled by the owner, not
   by assistants).
 - `service/` — the actual service: Cloudflare Worker + D1 + a two-faced PWA
-  (`/` subscribe, `/post` publish), deployed at kuhu-app.anishmg.workers.dev.
+  (`/` subscribe, `/post` publish), deployed at kuhuapp.starstucklab.com.
   Read `service/README.md` for the API surface and the deploy steps. Auth is
   invite-code → bearer token (hash-stored); push is payloadless VAPID.
 - `docs/` — concept and, later, architecture documents.

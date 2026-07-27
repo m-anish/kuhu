@@ -4,7 +4,7 @@ The kuhu service: a Cloudflare Worker, a D1 database, and one PWA with two
 faces. No framework, no build step — the app is plain HTML, CSS, and ES
 modules, served straight off the Worker's asset binding.
 
-Live: **https://kuhu-app.anishmg.workers.dev**
+Live: **https://kuhuapp.starstucklab.com**
 
 ## The two faces
 
@@ -93,6 +93,25 @@ npx wrangler d1 execute kuhu --remote --command "UPDATE teams SET invite_code='Y
 
 Rotating the VAPID keypair invalidates every existing push subscription and
 every subscriber has to tap "Notify me" again. Generate once; leave it alone.
+
+### The hostname
+
+`kuhuapp.starstucklab.com` is attached by the `custom_domain` route in
+`wrangler.toml`, which is also what makes Cloudflare issue a certificate for
+it. Two things learned the hard way:
+
+- **A hand-made CNAME to `kuhu-app.*.workers.dev` does not work.** It resolves,
+  Cloudflare proxies it, finds no origin, and returns `522` — with no
+  certificate, so HTTPS fails first. Custom domains are a Worker binding, not a
+  DNS record you write yourself. If a manual record already occupies the name,
+  the binding fails with `409 Conflict`; delete the record first.
+- **Adding `routes` while `workers_dev` is unset disables the workers.dev
+  URL.** Wrangler warns and moves on; the old URL starts 404ing. That's why
+  `workers_dev = true` is pinned explicitly above.
+
+One label deep is deliberate: free-plan Universal SSL covers
+`*.starstucklab.com` but not `app.kuhu.starstucklab.com`. A second-level
+subdomain would need Advanced Certificate Manager.
 
 ## Regions and teams
 

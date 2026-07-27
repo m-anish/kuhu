@@ -1,6 +1,6 @@
 # kuhu
 
-![status](https://img.shields.io/badge/status-clearing_its_throat-8fb573)
+![status](https://img.shields.io/badge/status-first_call-8fb573)
 ![scope](https://img.shields.io/badge/scope-power--cut_notices-4a5d43)
 ![delivery](https://img.shields.io/badge/delivery-web_push-6b8f5a)
 ![api](https://img.shields.io/badge/api-JSON_%2B_MQTT-555555)
@@ -41,29 +41,36 @@ Three audiences, one notice:
   [lokki](https://github.com/m-anish/lokki) already speak MQTT.
 
 **Regions are the first-class object.** A notice is published *to a region*,
-not to the world. Teams are scoped to regions and can nest — a district office
-above area teams above linemen — with permissions flowing downward. Version one
-ships with one team and one region, but the schema is born knowing better. The
-full concept, including the delivery-channel reasoning (web push first, a
-Telegram mirror nearly free, WhatsApp later, SMS never — DLT paperwork is its
-own kind of power cut), lives in [docs/concept.md](docs/concept.md).
+not to the world. Teams are scoped to regions and nest — a district office
+above area teams above linemen — with permissions flowing downward, enforced by
+a recursive query and verified in practice. The full concept, including the
+delivery-channel reasoning (web push first, a Telegram mirror nearly free,
+WhatsApp later, SMS never — DLT paperwork is its own kind of power cut), lives
+in [docs/concept.md](docs/concept.md).
 
-## Planned architecture
+## Architecture
 
-- **One PWA, two faces** — a big-button posting screen for the team, a
-  subscribe screen for everyone else. Installable, offline-tolerant, no app
-  store between a lineman and the publish button.
-- **Web push** for notifications — free, no per-message cost, works on Android
-  and modern iOS.
-- **Cloudflare Workers + D1** for the service itself, same shelf as the rest of
-  the lab.
+- **One PWA, two faces** — a big-button posting screen for the team at `/post`,
+  a subscribe screen for everyone else at `/`. Installable, offline-tolerant,
+  no app store between a lineman and the publish button.
+- **Invite codes, not OTPs** — a team shares a code; a lineman enters it once
+  per phone and gets a bearer token. Only its hash is stored. No SMS, no DLT
+  paperwork, no per-message cost.
+- **Payloadless web push** — the server tickles the subscription, the service
+  worker asks what changed and shows one notification. Notice text never rests
+  inside a third-party push service.
+- **Cloudflare Workers + D1**, same shelf as the rest of the lab.
+
+Details, endpoints, and deployment: [service/README.md](service/README.md).
 
 ## Status
 
-**Season 0 · Clearing its throat.** There is a name, a concept document, and a
-site. There is no code yet, and kuhu is honest about that — it would rather say
-nothing than say something that isn't so, which is, incidentally, the entire
-product philosophy.
+**Season 1 · First call.** The service is built and deployed at
+[kuhu-app.anishmg.workers.dev](https://kuhu-app.anishmg.workers.dev): posting,
+subscribing, cancelling, the public API, and the region/team hierarchy all work
+end to end. What it does not yet have is a real crew using it, MQTT publishing,
+or a Telegram mirror. One notice has been posted, by its author, to a ward that
+does not exist. It went through.
 
 ## Repository
 
@@ -71,7 +78,7 @@ product philosophy.
 |---|---|
 | [`site/`](site/) | Marketing/landing site (Cloudflare Pages → kuhu.starstucklab.com) |
 | [`docs/concept.md`](docs/concept.md) | The product concept: actors, regions, channels, API shape |
-| [`service/`](service/) | The service itself (Workers + D1) — placeholder, Season 1 work |
+| [`service/`](service/) | The service itself — Cloudflare Worker + D1 + the two-faced PWA |
 
 ## License
 

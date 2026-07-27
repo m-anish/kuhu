@@ -1,0 +1,19 @@
+{
+  "name": "kuhu-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "kuhu — power cut notices. Cloudflare Worker + D1 + PWA.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 execute kuhu --local --file=schema.sql",
+    "db:seed:local": "wrangler d1 execute kuhu --local --file=seed.sql",
+    "db:remote": "wrangler d1 execute kuhu --remote --file=schema.sql",
+    "db:seed:remote": "wrangler d1 execute kuhu --remote --file=seed.sql",
+    "vapid": "node tools/gen-vapid.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.50.0"
+  }
+}

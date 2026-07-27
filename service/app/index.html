@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>kuhu — power cut notices</title>
+<meta name="theme-color" content="#0c0f0c">
+<meta name="description" content="Quiet notifications before a power cut, for the areas you choose.">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <img src="/icon.svg" alt="" aria-hidden="true">
+    <b>kuhu</b>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" data-lang="en" aria-pressed="true">English</button>
+      <button type="button" data-lang="hi" aria-pressed="false">हिंदी</button>
+    </div>
+  </header>
+
+  <h1 data-s="sub_title">Know before the power goes.</h1>
+  <p class="lede" data-s="sub_lede"></p>
+
+  <div id="flash" class="flash hidden" role="status"></div>
+
+  <h2 data-s="your_areas">Your areas</h2>
+  <div id="regions" class="chips"></div>
+
+  <p style="margin-top:1.4rem">
+    <button id="notify" class="big" type="button" data-s="notify_me">Notify me</button>
+  </p>
+
+  <h2 data-s="upcoming">Coming up</h2>
+  <div id="upcoming"></div>
+
+  <div class="foot">
+    <a href="/post" data-s="post_link">Team login</a>
+    <a href="https://kuhu.starstucklab.com">kuhu.starstucklab.com</a>
+  </div>
+
+</div>
+<script type="module" src="/subscribe.js"></script>
+</body>
+</html>

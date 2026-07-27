@@ -36,14 +36,18 @@ which lives at `../starstucklab` on disk alongside the sibling spokes
 - `site/` — the marketing/landing page, deployed via Cloudflare Pages at
   https://kuhu.starstucklab.com (DNS/Pages setup is handled by the owner, not
   by assistants).
-- `service/` — the actual service (planned: Cloudflare Workers + D1, one PWA
-  with a posting face and a subscribing face, web push). Empty in Season 0.
+- `service/` — the actual service: Cloudflare Worker + D1 + a two-faced PWA
+  (`/` subscribe, `/post` publish), deployed at kuhu-app.anishmg.workers.dev.
+  Read `service/README.md` for the API surface and the deploy steps. Auth is
+  invite-code → bearer token (hash-stored); push is payloadless VAPID.
 - `docs/` — concept and, later, architecture documents.
 
 ## Guardrails
 
-- Don't invent engineering that hasn't happened; the status is honest
-  ("Season 0 · Clearing its throat") and should stay that way.
+- Don't invent engineering that hasn't happened. The status line is honest
+  about what is built versus merely intended ("Season 1 · First call": service
+  works, no real crew yet, no MQTT, no Telegram) — keep it that way when things
+  change.
 - Don't edit sibling repos from here (the hub card is the one exception, done
   from `../starstucklab`).
 - Hindi copy is a first-class deliverable, not a translation afterthought —

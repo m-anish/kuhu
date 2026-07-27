@@ -1,7 +1,8 @@
 # kuhu — product concept
 
-*Status: Season 0 (concept). Written 2026-07-27. This document encodes the
-decisions made at project birth so later design work doesn't re-litigate them.*
+*Written 2026-07-27 at project birth to encode decisions so later design work
+doesn't re-litigate them. Season 1 built what's below; see `service/README.md`
+for what actually exists and the "Open questions" section for what's settled.*
 
 ## The problem
 
@@ -85,11 +86,23 @@ Cloudflare Workers + D1 (+ KV for push subscriptions), one PWA with two faces
 `kind` is open beyond `cut` (voltage advisory, restoration ETA, "it's back") —
 "primarily power cuts, but other things might be there."
 
-## Open questions (deliberately unanswered in Season 0)
+## Open questions
 
-- Auth for posters: phone + OTP vs. a per-team invite code. Leaning invite
-  code + device remembering, to avoid SMS-OTP costs entirely.
-- Subscriber region discovery: map, list, or "enter the code on the poster in
-  your gali."
-- Whether "it's back" notifications are default-on (they break the
-  one-notification-per-cut budget; maybe opt-in).
+**Settled in Season 1:**
+
+- *Auth for posters* → **invite code**, not OTP. A team code is exchanged once
+  per phone for a bearer token; only the token's hash is stored. No SMS cost,
+  no DLT paperwork, and revocation is one `UPDATE`.
+- *Subscriber region discovery* → a plain list of regions, chosen as chips.
+  Fine at three wards; revisit if a district's worth ever appears at once.
+
+**Still open:**
+
+- Whether "it's back" notifications are default-on. The `restored` kind exists
+  and can be posted, but it spends the one-notification-per-cut budget twice —
+  probably it should be opt-in per subscriber.
+- MQTT publishing (`kuhu/<region>/cuts`, retained). Designed, not built; the
+  JSON poll endpoint covers gadgets meanwhile.
+- Free-text reasons are stored only in the language they were typed in — kuhu
+  will not invent a translation it cannot vouch for. Whether the other language
+  should get an assisted (clearly-marked) translation is undecided.

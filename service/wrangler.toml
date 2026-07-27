@@ -1,0 +1,23 @@
+# kuhu service — Cloudflare Worker + D1 + static PWA assets.
+name = "kuhu-app"
+main = "src/index.js"
+compatibility_date = "2026-07-01"
+
+# The PWA (both faces) is served from ./app; /api/* always hits the worker.
+[assets]
+directory = "./app"
+binding = "ASSETS"
+run_worker_first = ["/api/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "kuhu"
+database_id = "a3385903-9243-4daf-b66e-3a60b5415685"
+
+[vars]
+# Raw uncompressed P-256 public key, base64url — from tools/gen-vapid.mjs.
+VAPID_PUBLIC_KEY = "BIaOJBG89DrdxucRpIYUqgLBrYz9MhCzziUO2XeNlPZmz9GEzm5xkFB3DtbYwic7R6mQq6s-u6jpOPiMav4j6io"
+VAPID_SUBJECT = "mailto:anishmg@umich.edu"
+
+# Secrets (set with `wrangler secret put`):
+#   VAPID_PRIVATE_JWK — the private key JWK JSON from tools/gen-vapid.mjs

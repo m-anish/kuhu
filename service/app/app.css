@@ -1,0 +1,245 @@
+/* kuhu app — both faces.
+   System fonts on purpose: this thing must open on a mid-range phone with one
+   bar of signal, and web fonts are the first casualty of that. */
+
+:root {
+  --bg:      #0c0f0c;
+  --surface: #131712;
+  --raised:  #1a1f18;
+  --border:  #242a22;
+  --text:    #e9e8e0;
+  --dim:     #8d9186;
+  --mute:    #5c6057;
+  --sage:    #8fb573;
+  --amber:   #d9a866;
+  --alarm:   #c96a5a;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', 'Noto Sans Devanagari', sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 17px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 34rem; margin: 0 auto; padding: 1.25rem 1.1rem 4rem; }
+
+/* ---------- masthead ---------- */
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0 1.4rem;
+}
+
+.masthead img { height: 26px; }
+
+.masthead b {
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.masthead .who {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--mute);
+  text-align: right;
+}
+
+/* ---------- language toggle ---------- */
+.lang {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.lang button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.45rem 1.1rem;
+  cursor: pointer;
+}
+
+.lang button[aria-pressed='true'] {
+  background: var(--sage);
+  color: #0c0f0c;
+  font-weight: 600;
+}
+
+/* ---------- headings + prose ---------- */
+h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0.4rem 0 0.5rem;
+  letter-spacing: -0.015em;
+}
+
+h2 {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--mute);
+  margin: 2.2rem 0 0.8rem;
+}
+
+p.lede { color: var(--dim); margin: 0 0 1.6rem; }
+
+/* ---------- form controls: thumb-sized, always ---------- */
+label.field { display: block; margin-bottom: 1.1rem; }
+
+label.field > span {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--dim);
+  margin-bottom: 0.35rem;
+}
+
+input, select, textarea {
+  width: 100%;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.85rem 0.9rem;
+  min-height: 3.1rem;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--sage);
+  outline-offset: 1px;
+}
+
+textarea { min-height: 4.5rem; resize: vertical; }
+
+button.big {
+  appearance: none;
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  background: var(--sage);
+  color: #0b0e0a;
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 700;
+  padding: 1.05rem 1rem;
+  min-height: 3.5rem;
+  cursor: pointer;
+}
+
+button.big:disabled { opacity: 0.45; cursor: default; }
+button.big.ghost { background: transparent; border: 1px solid var(--border); color: var(--text); font-weight: 500; }
+button.big.warn { background: var(--alarm); color: #14090a; }
+
+/* ---------- chips (regions, reason presets, quick windows) ---------- */
+.chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+.chip {
+  appearance: none;
+  font: inherit;
+  font-size: 0.9rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--dim);
+  border-radius: 999px;
+  padding: 0.6rem 1rem;
+  min-height: 2.75rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.chip[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--sage) 20%, var(--surface));
+  border-color: var(--sage);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ---------- notice list ---------- */
+.notice {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--sage);
+  border-radius: 10px;
+  padding: 0.95rem 1.05rem;
+  margin-bottom: 0.75rem;
+}
+
+.notice.cancelled { border-left-color: var(--mute); opacity: 0.55; }
+.notice.cancelled .when { text-decoration: line-through; }
+
+.notice .meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--mute);
+  margin-bottom: 0.4rem;
+}
+
+.notice .meta .kind { color: var(--amber); }
+.notice .when { font-size: 1.12rem; font-weight: 600; }
+.notice .why { color: var(--dim); font-size: 0.93rem; margin-top: 0.15rem; }
+
+.notice button {
+  appearance: none;
+  margin-top: 0.7rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font: inherit;
+  font-size: 0.82rem;
+  border-radius: 8px;
+  padding: 0.45rem 0.85rem;
+  min-height: 2.4rem;
+  cursor: pointer;
+}
+
+.notice button:hover { color: var(--alarm); border-color: var(--alarm); }
+
+/* ---------- misc ---------- */
+.empty { color: var(--mute); font-style: italic; }
+
+.flash {
+  border-radius: 10px;
+  padding: 0.8rem 1rem;
+  margin-bottom: 1.2rem;
+  font-size: 0.93rem;
+}
+
+.flash.ok  { background: color-mix(in srgb, var(--sage) 18%, var(--surface)); border: 1px solid var(--sage); }
+.flash.bad { background: color-mix(in srgb, var(--alarm) 16%, var(--surface)); border: 1px solid var(--alarm); }
+
+.foot {
+  margin-top: 3rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.8rem;
+  color: var(--mute);
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.foot a { color: var(--dim); }
+
+.hidden { display: none !important; }

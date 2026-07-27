@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>kuhu — post a notice</title>
+<meta name="theme-color" content="#0c0f0c">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <img src="/icon.svg" alt="" aria-hidden="true">
+    <b>kuhu</b>
+    <div class="lang" role="group" aria-label="Language">
+      <button type="button" data-lang="en" aria-pressed="true">English</button>
+      <button type="button" data-lang="hi" aria-pressed="false">हिंदी</button>
+    </div>
+  </header>
+
+  <div id="flash" class="flash hidden" role="status"></div>
+
+  <!-- ============ JOIN (invite code) ============ -->
+  <section id="join-view">
+    <h1 data-s="join_title">Join your team</h1>
+    <p class="lede" data-s="join_lede"></p>
+
+    <label class="field">
+      <span data-s="invite_code">Invite code</span>
+      <input id="code" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" inputmode="text">
+    </label>
+
+    <label class="field">
+      <span data-s="your_name">Your name</span>
+      <input id="name" autocomplete="name">
+    </label>
+
+    <button id="join" class="big" type="button" data-s="join">Join</button>
+  </section>
+
+  <!-- ============ POST ============ -->
+  <section id="post-view" class="hidden">
+    <h1 data-s="post_title">Post a notice.</h1>
+    <p class="lede" data-s="post_lede"></p>
+
+    <h2 data-s="area">Area</h2>
+    <div id="areas" class="chips"></div>
+
+    <h2 data-s="kind">Kind</h2>
+    <div id="kinds" class="chips"></div>
+
+    <h2 data-s="when">When</h2>
+    <div id="quick" class="chips" style="margin-bottom:1rem"></div>
+    <label class="field">
+      <span data-s="starts">Starts</span>
+      <input id="from" type="datetime-local">
+    </label>
+    <label class="field">
+      <span data-s="ends">Ends</span>
+      <input id="to" type="datetime-local">
+    </label>
+
+    <h2 data-s="reason">Reason</h2>
+    <div id="reasons" class="chips" style="margin-bottom:1rem"></div>
+    <label class="field">
+      <span data-s="reason_other">Or write it yourself</span>
+      <textarea id="reason-free" rows="2"></textarea>
+    </label>
+
+    <button id="publish" class="big" type="button" data-s="publish">Publish notice</button>
+
+    <h2 data-s="your_notices">Your recent notices</h2>
+    <div id="mine"></div>
+
+    <p style="margin-top:2rem">
+      <button id="signout" class="big ghost" type="button" data-s="sign_out">Sign out of this phone</button>
+    </p>
+  </section>
+
+  <div class="foot">
+    <a href="/" data-s="subscribe_link">Subscribe instead</a>
+    <span id="who"></span>
+  </div>
+
+</div>
+<script type="module" src="/post.js"></script>
+</body>
+</html>

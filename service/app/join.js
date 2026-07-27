@@ -1,6 +1,6 @@
 // The join face. An invite link lands here, once.
 
-import { STRINGS, pickLang, setLang } from '/i18n.js';
+import { STRINGS, pickLang, setLang, parseInviteToken, isStandalone, isIOS, isInAppBrowser } from '/i18n.js';
 
 let lang = pickLang();
 const $ = (s) => document.querySelector(s);
@@ -14,8 +14,20 @@ function readToken() {
   return hash.get('t') || new URLSearchParams(location.search).get('t') || '';
 }
 
-const token = readToken();
+let token = readToken();
 let invite = null;
+
+// Which storage warning applies here, if any — kept so the language toggle can
+// repaint it (its text is chosen at runtime, so it has no data-s attribute).
+let warnVariant = null;
+
+function paintWarn() {
+  if (!warnVariant) return;
+  const p = warnVariant === 'inapp' ? 'inapp' : 'ios';
+  $('#ios-warn-title').textContent = t(`${p}_warn_title`);
+  $('#ios-warn-body').textContent = t(`${p}_warn_body`);
+  $('#ios-go').textContent = t(`${p}_dismiss`);
+}
 
 function paintStrings() {
   setLang(lang);
@@ -24,6 +36,7 @@ function paintStrings() {
     b.setAttribute('aria-pressed', String(b.dataset.lang === lang));
   }
   if (invite) paintInvite();
+  paintWarn();
 }
 
 function paintInvite() {
@@ -51,6 +64,9 @@ function show(which) {
   for (const id of ['checking', 'dead', 'ok']) {
     $(`#${id}`).classList.toggle('hidden', id !== which);
   }
+  // The paste fallback is offered whenever there is nothing valid to act on,
+  // and hidden once there is.
+  $('#paste-box').classList.toggle('hidden', which === 'ok');
 }
 
 async function check() {
@@ -63,9 +79,36 @@ async function check() {
     invite = data;
     paintInvite();
     show('ok');
+
+    // Warn before the link is spent in a container that can't share the result.
+    // iOS: the Home Screen app always signs in separately from Safari.
+    // Android: an app's built-in browser (WhatsApp) is its own WebView.
+    if (!isStandalone() && (isIOS() || isInAppBrowser())) {
+      warnVariant = !isIOS() && isInAppBrowser() ? 'inapp' : 'ios';
+      paintWarn();
+      $('#ios-warn').classList.remove('hidden');
+    }
   } catch {
     show('dead');
   }
+}
+
+/** Someone pasted a link instead of tapping one. Same destination, no reload —
+ *  a hash change alone would not reload the page anyway. */
+function goPasted() {
+  const found = parseInviteToken($('#paste').value);
+  if (!found) return say(t('paste_bad'));
+  token = found;
+  history.replaceState(null, '', `/join#t=${found}`);
+  flash.className = 'flash hidden';
+  show('checking');
+  check();
+}
+
+async function copyLink() {
+  const link = `${location.origin}/join#t=${token}`;
+  try { await navigator.clipboard.writeText(link); say(t('copied'), 'ok'); }
+  catch { say(link, 'ok'); }
 }
 
 async function join() {
@@ -99,6 +142,10 @@ for (const b of document.querySelectorAll('.lang button')) {
 }
 $('#join').addEventListener('click', join);
 $('#name').addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); });
+$('#paste-go').addEventListener('click', goPasted);
+$('#paste').addEventListener('keydown', (e) => { if (e.key === 'Enter') goPasted(); });
+$('#ios-copy').addEventListener('click', copyLink);
+$('#ios-go').addEventListener('click', () => $('#ios-warn').classList.add('hidden'));
 
 paintStrings();
 check();

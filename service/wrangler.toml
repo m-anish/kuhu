@@ -31,5 +31,18 @@ database_id = "a3385903-9243-4daf-b66e-3a60b5415685"
 VAPID_PUBLIC_KEY = "BIaOJBG89DrdxucRpIYUqgLBrYz9MhCzziUO2XeNlPZmz9GEzm5xkFB3DtbYwic7R6mQq6s-u6jpOPiMav4j6io"
 VAPID_SUBJECT = "mailto:anishmg@umich.edu"
 
+# Optional mirrors. Both are silently skipped while unset, which is how kuhu
+# ships — the app works fully without either.
+#
+# Telegram: create a bot with @BotFather, add it to the channel as an admin,
+# then set the channel here and the token as a secret.
+# TELEGRAM_CHAT_ID = "@kuhunotices"
+#
+# MQTT: retained publishes to kuhu/<area>/cuts, for gadgets that would rather
+# be told than poll.
+# MQTT_URL = "mqtts://broker.example:8883"
+
 # Secrets (set with `wrangler secret put`):
-#   VAPID_PRIVATE_JWK — the private key JWK JSON from tools/gen-vapid.mjs
+#   VAPID_PRIVATE_JWK  — the private key JWK JSON from tools/gen-vapid.mjs
+#   TELEGRAM_BOT_TOKEN — from @BotFather
+#   MQTT_USERNAME / MQTT_PASSWORD — broker credentials

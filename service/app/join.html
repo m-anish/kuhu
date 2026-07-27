@@ -37,10 +37,28 @@
     <p class="lede" data-s="link_dead_body"></p>
   </section>
 
+  <!-- paste fallback: for when a link cannot be tapped in the right place -->
+  <section id="paste-box" class="panel">
+    <h3 data-s="paste_title">Have a link?</h3>
+    <p class="hint-p" data-s="paste_help"></p>
+    <label class="field">
+      <input id="paste" autocapitalize="none" spellcheck="false" enterkeyhint="go">
+    </label>
+    <button id="paste-go" class="big ghost" type="button" data-s="paste_go">Continue</button>
+  </section>
+
   <!-- link is good -->
   <section id="ok" class="hidden">
     <h1 id="invite-head"></h1>
     <p class="lede" id="invite-lede"></p>
+
+    <!-- iOS: the Home Screen app has its own sign-in, separate from Safari -->
+    <div id="ios-warn" class="warnbox hidden">
+      <strong id="ios-warn-title">Using an iPhone?</strong>
+      <p id="ios-warn-body"></p>
+      <button id="ios-copy" class="big" type="button" data-s="ios_copy">Copy this link</button>
+      <button id="ios-go" class="big ghost" type="button">Continue anyway</button>
+    </div>
 
     <div id="new-fields">
       <label class="field">

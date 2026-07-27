@@ -67,8 +67,28 @@ export const STRINGS = {
     move_make: 'Move me to a new phone',
     move_warn: 'Open this on the new phone within 30 minutes. This phone will be signed out once you do.',
     move_head: 'Move {name} to this phone.',
-    move_lede: 'Your team, your role and your notices all come with you. The old phone will be signed out.',
+    move_lede: 'Your team, your role and your notices all come with you. Wherever you made this link will be signed out.',
     move_confirm: 'Move me here',
+    // pasting a link (the fallback when a link can't be tapped in the right place)
+    paste_title: 'Have a link?',
+    paste_help: 'Paste an invite link, or a link you made on another phone.',
+    paste_ph: 'Paste the link here',
+    paste_go: 'Continue',
+    paste_bad: "That doesn't look like a kuhu link.",
+    // iOS home-screen app storage warning
+    ios_warn_title: 'Using an iPhone?',
+    ios_warn_body: 'The Home Screen app keeps its own separate sign-in from Safari. Add kuhu to your Home Screen first, then paste this link inside the app — otherwise you will be signed in here but not there.',
+    ios_copy: 'Copy this link',
+    ios_dismiss: 'Continue in Safari anyway',
+    inapp_warn_title: 'Opened from inside WhatsApp?',
+    inapp_warn_body: "This built-in browser signs in separately from Chrome and from the Home Screen app. Copy the link and open it in Chrome instead, or you'll be signed in here only.",
+    inapp_dismiss: 'Continue here anyway',
+    move_title_alt: 'New phone, or the Home Screen app?',
+    move_help_alt: 'Make a link here and paste it into the other one. On iPhone the Home Screen app signs in separately from Safari, so it needs its own link.',
+    // support
+    support_note: 'kuhu is free, and intends to stay that way. The chai that keeps it awake is not.',
+    support_chai: '☕ Buy me a chai',
+    support_kofi: '♥ Ko-fi',
     // admin
     admin: 'Admin',
     invite_someone: 'Invite someone',
@@ -176,8 +196,25 @@ export const STRINGS = {
     move_make: 'मुझे नए फ़ोन पर ले जाएँ',
     move_warn: 'इसे 30 मिनट के अंदर नए फ़ोन पर खोलिए। खोलते ही यह फ़ोन साइन आउट हो जाएगा।',
     move_head: '{name} को इस फ़ोन पर लाएँ।',
-    move_lede: 'आपकी टीम, आपका काम और आपकी सूचनाएँ — सब साथ आ जाएँगी। पुराना फ़ोन साइन आउट हो जाएगा।',
+    move_lede: 'आपकी टीम, आपका काम और आपकी सूचनाएँ — सब साथ आ जाएँगी। जहाँ से यह लिंक बनाया था, वहाँ साइन आउट हो जाएगा।',
     move_confirm: 'मुझे यहाँ ले आएँ',
+    paste_title: 'लिंक है आपके पास?',
+    paste_help: 'निमंत्रण लिंक, या दूसरे फ़ोन पर बनाया हुआ लिंक यहाँ पेस्ट कीजिए।',
+    paste_ph: 'लिंक यहाँ पेस्ट कीजिए',
+    paste_go: 'आगे बढ़ें',
+    paste_bad: 'यह kuhu का लिंक नहीं लग रहा।',
+    ios_warn_title: 'iPhone इस्तेमाल कर रहे हैं?',
+    ios_warn_body: 'होम स्क्रीन ऐप का साइन-इन Safari से अलग होता है। पहले kuhu को होम स्क्रीन पर जोड़िए, फिर यह लिंक ऐप के अंदर पेस्ट कीजिए — वरना यहाँ साइन इन होंगे, ऐप में नहीं।',
+    ios_copy: 'यह लिंक कॉपी करें',
+    ios_dismiss: 'Safari में ही आगे बढ़ें',
+    inapp_warn_title: 'WhatsApp के अंदर से खोला है?',
+    inapp_warn_body: 'यह अंदर वाला ब्राउज़र Chrome और होम स्क्रीन ऐप से अलग साइन इन होता है। लिंक कॉपी करके Chrome में खोलिए, वरना सिर्फ़ यहीं साइन इन रहेंगे।',
+    inapp_dismiss: 'यहीं आगे बढ़ें',
+    move_title_alt: 'नया फ़ोन, या होम स्क्रीन ऐप?',
+    move_help_alt: 'यहाँ लिंक बनाइए और दूसरे में पेस्ट कीजिए। iPhone पर होम स्क्रीन ऐप अलग से साइन इन होता है, इसलिए उसे अपना लिंक चाहिए।',
+    support_note: 'kuhu मुफ़्त है, और आगे भी रहेगा। जो चाय इसे जगाए रखती है, वह नहीं।',
+    support_chai: '☕ एक चाय पिला दीजिए',
+    support_kofi: '♥ Ko-fi',
     admin: 'एडमिन',
     invite_someone: 'किसी को बुलाएँ',
     invite_as: 'किस रूप में',
@@ -231,6 +268,43 @@ export const REASONS = [
   { en: 'Scheduled load shedding', hi: 'निर्धारित लोड शेडिंग' },
   { en: 'Pole and wire work',      hi: 'खंभे और तार का काम' },
 ];
+
+/**
+ * Pull an invite token out of whatever the person pasted — a whole link, a
+ * link with a ?t= query, or the bare token on its own. Tokens are base64url
+ * from 24 random bytes, so 32 chars of that alphabet.
+ */
+export function parseInviteToken(text) {
+  const s = String(text || '').trim();
+  if (!s) return '';
+  const m = s.match(/[#?&]t=([A-Za-z0-9_-]{20,})/) || s.match(/^([A-Za-z0-9_-]{20,})$/);
+  return m ? m[1] : '';
+}
+
+/**
+ * iOS gives a Home Screen web app its own storage, separate from Safari's — so
+ * signing in on one does nothing for the other. Detecting the combination lets
+ * us warn before someone joins in the wrong place.
+ */
+export function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+}
+
+export function isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+/**
+ * An app's own built-in browser (WhatsApp, Facebook, Instagram) rather than the
+ * real one. On Android these are WebViews, which keep their own storage — so
+ * signing in here does nothing for Chrome or for an installed app. The `wv`
+ * token is Android WebView's own marker.
+ */
+export function isInAppBrowser() {
+  const ua = navigator.userAgent;
+  return /\bwv\b/.test(ua) || /FBAN|FBAV|Instagram|Line\//.test(ua);
+}
 
 export function pickLang() {
   const saved = localStorage.getItem('kuhu.lang');

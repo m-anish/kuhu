@@ -1,7 +1,7 @@
 // The posting face. Invite code once, then: area, kind, window, reason, send.
 // Designed for one thumb, in the rain, in under a minute.
 
-import { STRINGS, REASONS, pickLang, setLang, fmtWindow, localToIso, isoToLocalInput } from '/i18n.js';
+import { STRINGS, REASONS, pickLang, setLang, fmtWindow, localToIso, isoToLocalInput, parseInviteToken } from '/i18n.js';
 
 let lang = pickLang();
 let token = localStorage.getItem('kuhu.token') || '';
@@ -562,6 +562,12 @@ $('#copy-link').addEventListener('click', copyInvite);
 $('#add-area').addEventListener('click', addArea);
 $('#new-en').addEventListener('input', suggestSlug);
 $('#new-slug').addEventListener('input', (e) => { e.target.dataset.touched = '1'; });
+$('#paste-go').addEventListener('click', () => {
+  const found = parseInviteToken($('#paste').value);
+  if (!found) return say(t('paste_bad'), 'bad');
+  location.href = `/join#t=${found}`;
+});
+$('#paste').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#paste-go').click(); });
 $('#move').addEventListener('click', makeMove);
 $('#move-share').addEventListener('click', shareMove);
 $('#move-copy').addEventListener('click', copyMove);

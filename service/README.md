@@ -57,6 +57,39 @@ never a password.
 Losing a phone entirely is still the admin's job: remove the person (which kills
 the token immediately) and send them a fresh invite.
 
+## Where a notice goes
+
+Posting or cancelling fans out to three places at once, each swallowing its own
+failures — a sulking broker or a revoked bot token must never fail the notice,
+because the notice is the thing that matters:
+
+| Channel | Who it's for | State |
+|---|---|---|
+| **Web push** | People with the app | Always on |
+| **Telegram** | People who won't enable push | Optional; off until configured |
+| **MQTT** (retained) | Machines | Optional; off until configured |
+
+**Telegram**: create a bot with [@BotFather](https://t.me/BotFather), add it to
+your channel as an admin, then set `TELEGRAM_CHAT_ID` in `wrangler.toml` and
+`wrangler secret put TELEGRAM_BOT_TOKEN`. Messages are bilingual and carry the
+same words the app shows, so there is only one version of the truth.
+
+**MQTT**: set `MQTT_URL` (e.g. `mqtts://broker.example:8883`) plus
+`MQTT_USERNAME` / `MQTT_PASSWORD` as secrets. Each affected area gets a
+**retained** JSON payload on `kuhu/<area>/cuts`, so a device that boots at
+midday still learns about the afternoon's cut instead of waiting for the next
+posting. The client is ~60 lines of MQTT 3.1.1 over a raw Worker TCP socket —
+CONNECT, CONNACK, PUBLISH, DISCONNECT, QoS 0. Packet encoding lives in
+`src/mqtt-packets.js`, separate from the socket code so it can be tested
+outside the Workers runtime:
+
+```bash
+node tools/mqtt-selftest.mjs        # encoder checks + a live broker handshake
+```
+
+The JSON API stays the canonical contract. MQTT is a courtesy for things that
+would rather be told than asked.
+
 ## Roles
 
 | Role | Can |

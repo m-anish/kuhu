@@ -299,6 +299,19 @@ p.hint-p {
 
 .rename-form { flex-basis: 100%; margin-top: 0.7rem; }
 
+/* a caution the reader should not be able to skim past */
+.warnbox {
+  background: color-mix(in srgb, var(--amber) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent);
+  border-radius: 12px;
+  padding: 1rem 1.1rem 1.15rem;
+  margin-bottom: 1.4rem;
+}
+
+.warnbox strong { display: block; color: var(--amber); margin-bottom: 0.4rem; }
+.warnbox p { color: var(--dim); font-size: 0.92rem; margin: 0 0 0.9rem; }
+.warnbox button.big + button.big { margin-top: 0.6rem; }
+
 /* the generated invite link — must be readable and selectable */
 .linkbox {
   font-family: var(--mono);
@@ -326,8 +339,40 @@ p.hint-p {
 .flash.ok  { background: color-mix(in srgb, var(--sage) 18%, var(--surface)); border: 1px solid var(--sage); }
 .flash.bad { background: color-mix(in srgb, var(--alarm) 16%, var(--surface)); border: 1px solid var(--alarm); }
 
-.foot {
+/* Keeping the lab caffeinated. Asks once, quietly, and does not follow you. */
+.support {
   margin-top: 3rem;
+  padding-top: 1.3rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.support p {
+  flex-basis: 100%;
+  margin: 0 0 0.25rem;
+  color: var(--mute);
+  font-size: 0.84rem;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.support a {
+  font-size: 0.84rem;
+  color: var(--dim);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.45rem 0.9rem;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.support a:hover { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 50%, transparent); }
+
+.foot {
+  margin-top: 1.6rem;
   padding-top: 1.2rem;
   border-top: 1px solid var(--border);
   font-size: 0.8rem;

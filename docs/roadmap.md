@@ -26,30 +26,29 @@ The service runs at [kuhuapp.starstucklab.com](https://kuhuapp.starstucklab.com)
 - **Self-service phone move**: mint a 30-minute link on the old phone, open it
   on the new one, old phone signs out.
 - Public JSON API for gadgets, payloadless web push for people.
+- **Telegram mirror** and **retained MQTT** (`kuhu/<area>/cuts`) — both
+  optional, both silently off until configured, neither able to fail a notice.
+- Storage-container warnings and a paste-a-link fallback, because an installed
+  app on iOS cannot see Safari's sign-in.
 
 ---
 
 ## Next — small, and probably worth it
 
-**Test the WhatsApp in-app browser.** The highest-value hour of work here isn't
-code. Recent WhatsApp versions open links in their own browser, whose storage
-may be separate from Chrome's. If it is, a lineman who joins from inside
-WhatsApp will find himself signed out when he later opens the site normally.
-Check it on a real phone before onboarding anyone; if it bites, the fix is
-either an "open in browser" instruction or a detection banner on `/join`.
+**Per-region Telegram channels.** Today the mirror posts every area to one
+channel. A district would want one channel per area — the schema change is a
+`telegram_chat_id` on `regions` plus an admin field.
+
+**Confirm the in-app browser detection on a real phone.** The `wv` User-Agent
+token is the standard Android WebView marker and the warning is written to be
+true either way, but it is heuristic. Watch one real lineman open one real
+WhatsApp link before trusting it.
 
 **Offline posting queue.** A lineman up a pole is precisely the person with no
 signal, and precisely the person who most needs to post. The service worker
 could accept a notice, hold it, and send it when the connection returns — with
 honest UI about what has and hasn't gone out. This is the single most
 field-relevant improvement on the list.
-
-**MQTT publishing** (`kuhu/<region>/cuts`, retained). Designed in concept.md,
-not built. jigawatt and lokki already speak MQTT, so this is where kuhu stops
-being a phone app and starts being infrastructure the other machines can hear.
-
-**Telegram channel mirror.** Nearly free to run, one channel per region, for
-people who won't enable web push.
 
 **Opt-in "power's back".** The `restored` kind already exists and can be
 posted, but sending it by default spends the notification budget twice per

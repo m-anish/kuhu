@@ -30,6 +30,8 @@
 
 import { json, badRequest, unauthorized, forbidden, notFound, corsPreflight, randomId, randomToken, sha256hex, isIsoDate } from './util.js';
 import { notifyRegions } from './push.js';
+import { mirrorToTelegram } from './telegram.js';
+import { publishMqtt, topicFor } from './mqtt.js';
 
 const ROLES = ['poster', 'admin'];
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,38}$/;
@@ -217,7 +219,9 @@ async function route(request, env, ctx, url) {
     }
     // Notify across all of them at once: somebody subscribed to two of these
     // areas is still one person, and still gets one buzz.
-    ctx.waitUntil(notifyRegions(db, env, targets.map((r) => r.id)));
+    ctx.waitUntil(fanOut(db, env, targets, {
+      kind, status: 'scheduled', from, to, reason_en, reason_hi,
+    }));
     return json({ ids, batch_id: batch, areas: targets.length, status: 'scheduled' }, 201);
   }
 
@@ -242,7 +246,15 @@ async function route(request, env, ctx, url) {
     for (const n of reachable) {
       await db.prepare("UPDATE notices SET status = 'cancelled' WHERE id = ?1").bind(n.id).run();
     }
-    ctx.waitUntil(notifyRegions(db, env, reachable.map((n) => n.region_id)));
+    const full = await db.prepare(
+      'SELECT kind, win_from, win_to, reason_en, reason_hi FROM notices WHERE id = ?1',
+    ).bind(notice.id).first();
+    const cancelledRegions = reachable.map((n) => mine.find((r) => r.id === n.region_id));
+    ctx.waitUntil(fanOut(db, env, cancelledRegions, {
+      kind: full.kind, status: 'cancelled',
+      from: full.win_from, to: full.win_to,
+      reason_en: full.reason_en, reason_hi: full.reason_hi,
+    }));
     return json({ ids: reachable.map((n) => n.id), status: 'cancelled' });
   }
 
@@ -472,6 +484,38 @@ async function route(request, env, ctx, url) {
 }
 
 // ───────────────────────── helpers ─────────────────────────
+
+/**
+ * Everything that happens after a notice changes: web push to people, a
+ * Telegram line for the channel, retained MQTT for the machines. All three run
+ * in ctx.waitUntil and each swallows its own failures — a sulking broker or a
+ * revoked bot token must never make posting a notice fail, because the notice
+ * is the thing that actually matters.
+ */
+async function fanOut(db, env, regions, notice) {
+  const ids = regions.map((r) => r.id);
+  const payload = {
+    ...notice,
+    areas_en: regions.map((r) => r.name_en).join(', '),
+    areas_hi: regions.map((r) => r.name_hi).join(', '),
+  };
+  const state = JSON.stringify({
+    status: notice.status,
+    kind: notice.kind,
+    from: notice.from,
+    to: notice.to,
+    reason: { en: notice.reason_en, hi: notice.reason_hi },
+    areas: regions.map((r) => r.slug),
+    updated_at: new Date().toISOString(),
+  });
+
+  await Promise.allSettled([
+    notifyRegions(db, env, ids),
+    mirrorToTelegram(env, payload),
+    // Retained, per area — a device that boots later still learns the state.
+    publishMqtt(env, regions.map((r) => [topicFor(r.slug), state])),
+  ]);
+}
 
 /**
  * The origin to put inside an invite link. Never emit http:// for a real host —

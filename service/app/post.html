@@ -30,7 +30,17 @@
   <section id="join-view">
     <h1 data-s="join_title">Join your team</h1>
     <p class="lede" data-s="join_by_link"></p>
-    <p><a class="sl-link" href="/" data-s="subscribe_link">Subscribe instead</a></p>
+
+    <!-- The fallback that makes an installed app usable: paste the link the
+         admin sent, or one you made on another phone. -->
+    <div class="panel">
+      <h3 data-s="paste_title">Have a link?</h3>
+      <p class="hint-p" data-s="paste_help"></p>
+      <label class="field">
+        <input id="paste" autocapitalize="none" spellcheck="false" enterkeyhint="go">
+      </label>
+      <button id="paste-go" class="big" type="button" data-s="paste_go">Continue</button>
+    </div>
   </section>
 
   <!-- ============ POST ============ -->
@@ -123,8 +133,8 @@
     </section>
 
     <div class="panel" style="margin-top:2rem">
-      <h3 data-s="move_title">Got a new phone?</h3>
-      <p class="hint-p" data-s="move_help"></p>
+      <h3 data-s="move_title_alt">New phone, or the Home Screen app?</h3>
+      <p class="hint-p" data-s="move_help_alt"></p>
       <button id="move" class="big ghost" type="button" data-s="move_make">Move me to a new phone</button>
       <div id="move-result" class="hidden" style="margin-top:1rem">
         <div class="linkbox" id="move-url"></div>
@@ -138,6 +148,13 @@
       <button id="signout" class="big ghost" type="button" data-s="sign_out">Sign out of this phone</button>
     </p>
   </section>
+
+
+  <div class="support">
+    <p data-s="support_note"></p>
+    <a href="https://buymeachai.ezee.li/anishmg" target="_blank" rel="noopener" data-s="support_chai">☕ Buy me a chai</a>
+    <a href="https://ko-fi.com/P5P7BMO10" target="_blank" rel="noopener" data-s="support_kofi">♥ Ko-fi</a>
+  </div>
 
   <div class="foot">
     <a href="/" data-s="subscribe_link">Subscribe instead</a>

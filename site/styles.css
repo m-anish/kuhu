@@ -1,0 +1,322 @@
+/* Starstuck Lab kit — kuhu theme overrides */
+:root {
+  --sl-bg:        #0c0f0c;
+  --sl-surface:   #131712;
+  --sl-border:    #1d221b;
+  --sl-text:      #e9e8e0;
+  --sl-text-dim:  #8d9186;
+  --sl-text-mute: #5c6057;
+  --sl-accent:    #8fb573;   /* sage — leaves the bird hides in */
+  --sl-accent-2:  #d9a866;   /* dawn amber — the hour it calls */
+  --sl-font-display: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --sl-font-body:    'Karla', system-ui, -apple-system, sans-serif;
+  --sl-font-mono:    'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  --sl-maxw:      1020px;
+}
+
+/* ============================================================
+   kuhu / season 0
+   marketing site — dusk in the leaves, one lamp already lit
+   ============================================================ */
+
+:root {
+  --bg:        var(--sl-bg);
+  --surface:   var(--sl-surface);
+  --border:    #242a22;
+  --text:      var(--sl-text);
+  --dim:       var(--sl-text-dim);
+  --mute:      var(--sl-text-mute);
+  --accent:    var(--sl-accent);
+  --accent-2:  var(--sl-accent-2);
+  --serif:     var(--sl-font-display);
+  --sans:      var(--sl-font-body);
+  --mono:      var(--sl-font-mono);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration: none; }
+
+code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  color: var(--accent-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.1em 0.4em;
+  white-space: nowrap;
+}
+
+section { padding: 5rem 0; }
+
+h2 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+  line-height: 1.2;
+  margin: 0.6rem 0 1.2rem;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- top bar ---------- */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar-inner {
+  max-width: var(--sl-maxw);
+  margin: 0 auto;
+  padding: 0.8rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-family: var(--serif);
+  font-size: 1.25rem;
+  color: var(--text);
+}
+
+.brand img { height: 22px; width: auto; }
+
+.status {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--dim);
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-2);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent-2) 60%, transparent);
+}
+
+/* ---------- hero ---------- */
+.hero { padding: 7rem 0 4.5rem; }
+
+.hero h1 {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: clamp(4rem, 12vw, 7.5rem);
+  line-height: 1;
+  margin: 1rem 0 0.5rem;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+}
+
+/* the two-note call: two soft arcs that ripple, slowly, like the mark */
+.call { display: inline-flex; align-items: center; position: relative; width: 0.9em; height: 0.9em; }
+.call i {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  translate: 0 -50%;
+  width: 55%;
+  height: 55%;
+  border: 3px solid var(--accent);
+  border-radius: 50%;
+  clip-path: inset(0 0 0 55%);
+  opacity: 0.9;
+}
+.call i:nth-child(2) {
+  width: 90%;
+  height: 90%;
+  border-color: var(--accent-2);
+  opacity: 0.7;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .call i { animation: call-note 5s ease-out infinite; }
+  .call i:nth-child(2) { animation-delay: 0.6s; }
+  @keyframes call-note {
+    0%, 55%, 100% { opacity: 0.25; }
+    62%           { opacity: 1; }
+    80%           { opacity: 0.25; }
+  }
+}
+
+.tagline {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(1.2rem, 3vw, 1.6rem);
+  color: var(--accent-2);
+  margin: 0 0 1.6rem;
+}
+
+.lede {
+  max-width: 44rem;
+  font-size: 1.08rem;
+  color: var(--dim);
+  margin: 0;
+}
+
+/* ---------- notice demo ---------- */
+.notice-demo { padding-top: 2rem; }
+
+.notice-card {
+  max-width: 26rem;
+  margin-top: 1.2rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 1.3rem 1.5rem 1rem;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.notice-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--dim);
+  margin-bottom: 0.9rem;
+}
+
+.notice-kind { color: var(--accent-2); }
+
+.notice-window {
+  font-family: var(--serif);
+  font-size: 1.5rem;
+  font-weight: 500;
+  margin: 0;
+  line-height: 1.25;
+}
+
+.notice-window-hi {
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  color: var(--dim);
+  margin: 0.15rem 0 0.8rem;
+}
+
+.notice-reason {
+  font-size: 0.95rem;
+  color: var(--dim);
+  margin: 0 0 1rem;
+}
+
+.notice-foot {
+  border-top: 1px dashed var(--border);
+  padding-top: 0.7rem;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--mute);
+}
+
+.notice-note {
+  max-width: 40rem;
+  color: var(--mute);
+  font-style: italic;
+  margin-top: 1.4rem;
+}
+
+/* ---------- audiences ---------- */
+.aud-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.2rem;
+  margin-top: 1.5rem;
+}
+
+.aud-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.4rem 1.5rem;
+}
+
+.aud-card h3 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.2rem;
+  margin: 0 0 0.6rem;
+  color: var(--accent);
+}
+
+.aud-card p { margin: 0; color: var(--dim); font-size: 0.95rem; }
+
+/* ---------- shape ---------- */
+.shape-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  max-width: 46rem;
+}
+
+.shape-list li {
+  padding: 1rem 0 1rem 1.6rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--dim);
+  position: relative;
+}
+
+.shape-list li::before {
+  content: '◗';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-size: 0.8rem;
+}
+
+.shape-list strong { color: var(--text); font-weight: 600; }
+
+/* ---------- manner ---------- */
+.manner { padding-top: 2rem; }
+
+.vow {
+  margin: 1rem 0 0;
+  max-width: 44rem;
+  border-left: 3px solid var(--accent-2);
+  padding: 0.4rem 0 0.4rem 1.4rem;
+}
+
+.vow p {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.25rem;
+  line-height: 1.6;
+  color: var(--text);
+  margin: 0;
+}
+
+/* ---------- season / status ---------- */
+.season p { max-width: 44rem; color: var(--dim); }
+
+/* ---------- family + footer spacing ---------- */
+.family-band { border-top: 1px solid var(--border); }
+
+@media (max-width: 640px) {
+  section { padding: 3.2rem 0; }
+  .hero { padding: 4.5rem 0 3rem; }
+}

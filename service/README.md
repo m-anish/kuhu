@@ -33,6 +33,30 @@ rewrite links.
 Only SHA-256 hashes are stored, for both invites and the resulting poster
 tokens. The database holds nothing replayable.
 
+## One notice, several areas
+
+An outage rarely respects a boundary, so areas are multi-select. Posting writes
+**one row per area**, sharing a `batch_id` — every consumer downstream
+(`next-cuts`, subscriptions, push) still deals with one notice in one region and
+needed no changes. The batch exists so the app can show the four rows as the one
+act they were, and so cancelling any of them cancels all of them.
+
+Push is deduplicated across the whole batch: somebody who follows three of the
+four affected areas is still one person, gets one buzz, and sees all three of
+their area names in it. Spending the notification budget once is the entire
+promise of the app, and a multi-area notice is the easiest way to break it.
+
+## Moving to a new phone
+
+A signed-in person can mint a 30-minute link for themselves (**Got a new
+phone?** on `/post`) and open it on the new device. It re-issues their token —
+same person, same role, same history — and the old phone is signed out the
+instant it's used. No admin errand, and nothing to recover, because there was
+never a password.
+
+Losing a phone entirely is still the admin's job: remove the person (which kills
+the token immediately) and send them a fresh invite.
+
 ## Roles
 
 | Role | Can |
@@ -90,8 +114,9 @@ Poster, `Authorization: Bearer <token>`:
 
 ```
 GET  /api/me                          {name, role, regions}
-POST /api/notices                     {region, kind, from, to, reason_en, reason_hi}
-POST /api/notices/{id}/cancel
+POST /api/notices                     {regions[], kind, from, to, reason_en, reason_hi}
+POST /api/notices/{id}/cancel         cancels the whole batch it belongs to
+POST /api/me/move                     → a 30-minute link to move to a new phone
 GET  /api/team/regions                what this poster may post to
 GET  /api/team/notices                the team's recent notices
 ```

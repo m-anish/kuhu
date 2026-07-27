@@ -43,7 +43,10 @@ CREATE TABLE IF NOT EXISTS invites (
   expires_at TEXT NOT NULL,
   used_at    TEXT,
   used_by    INTEGER REFERENCES posters(id),
-  revoked_at TEXT
+  revoked_at TEXT,
+  -- Set when this invite moves an existing person to a new phone rather than
+  -- adding a new one. Redeeming re-issues their token; the old phone dies.
+  move_poster_id INTEGER REFERENCES posters(id)
 );
 CREATE INDEX IF NOT EXISTS invites_team ON invites(team_id, expires_at);
 
@@ -59,9 +62,13 @@ CREATE TABLE IF NOT EXISTS notices (
   status    TEXT NOT NULL DEFAULT 'scheduled' -- scheduled | cancelled
             CHECK (status IN ('scheduled','cancelled')),
   posted_by INTEGER REFERENCES posters(id),
-  posted_at TEXT NOT NULL DEFAULT (datetime('now'))
+  posted_at TEXT NOT NULL DEFAULT (datetime('now')),
+  -- Posting to several areas writes one row per area, sharing a batch id so
+  -- they can be shown, and cancelled, as the single act they were.
+  batch_id  TEXT
 );
 CREATE INDEX IF NOT EXISTS notices_region_window ON notices(region_id, win_to);
+CREATE INDEX IF NOT EXISTS notices_batch ON notices(batch_id);
 
 CREATE TABLE IF NOT EXISTS subscriptions (
   id         INTEGER PRIMARY KEY,

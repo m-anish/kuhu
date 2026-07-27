@@ -70,12 +70,14 @@ Details, endpoints, and deployment: [service/README.md](service/README.md).
 
 ## Status
 
-**Season 1 · First call.** The service is built and deployed at
-[kuhuapp.starstucklab.com](https://kuhuapp.starstucklab.com): posting,
-subscribing, cancelling, the public API, and the region/team hierarchy all work
-end to end. What it does not yet have is a real crew using it, MQTT publishing,
-or a Telegram mirror. One notice has been posted, by its author, to a ward that
-does not exist. It went through.
+**Season 1 · First call — beta.** The service is built and deployed at
+[kuhuapp.starstucklab.com](https://kuhuapp.starstucklab.com): posting to one or
+several areas, subscribing, cancelling, invite links, the admin role, the
+public API, and the team hierarchy all work end to end. Six real areas around
+Dharamshala are configured. What it does not yet have is a real crew using it,
+MQTT publishing, or a Telegram mirror — see [docs/roadmap.md](docs/roadmap.md).
+It has not met a monsoon. Notices so far have been posted only by its author,
+to an empty audience. They went through.
 
 ## Repository
 
@@ -83,6 +85,7 @@ does not exist. It went through.
 |---|---|
 | [`site/`](site/) | Marketing/landing site (Cloudflare Pages → kuhu.starstucklab.com) |
 | [`docs/concept.md`](docs/concept.md) | The product concept: actors, regions, channels, API shape |
+| [`docs/roadmap.md`](docs/roadmap.md) | What's next, what's refused, and why |
 | [`service/`](service/) | The service itself — Cloudflare Worker + D1 + the two-faced PWA |
 
 ## License

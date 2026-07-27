@@ -29,7 +29,7 @@
 //   POST   /api/subscriptions/pending
 
 import { json, badRequest, unauthorized, forbidden, notFound, corsPreflight, randomId, randomToken, sha256hex, isIsoDate } from './util.js';
-import { notifyRegion } from './push.js';
+import { notifyRegions } from './push.js';
 
 const ROLES = ['poster', 'admin'];
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,38}$/;
@@ -91,17 +91,39 @@ async function route(request, env, ctx, url) {
     const invite = await liveInvite(db, url.searchParams.get('t') || '');
     if (!invite) return json({ valid: false }, 404);
     const team = await db.prepare('SELECT name FROM teams WHERE id = ?1').bind(invite.team_id).first();
-    return json({ valid: true, team: team?.name ?? '', role: invite.role, expires_at: invite.expires_at });
+    const out = { valid: true, team: team?.name ?? '', role: invite.role, expires_at: invite.expires_at };
+    if (invite.move_poster_id) {
+      const who = await activePoster(db, invite.move_poster_id);
+      if (!who) return json({ valid: false }, 404);   // they were removed after minting
+      out.move = true;
+      out.name = who.name;
+    }
+    return json(out);
   }
 
   if (method === 'POST' && path === '/api/invites/redeem') {
     const body = await request.json().catch(() => null);
+    const invite = await liveInvite(db, body?.token || '');
+    if (!invite) return json({ error: 'invite_invalid' }, 401);
+
+    // A move: re-issue an existing person's token onto this phone. The old
+    // phone's token stops working the moment this row is updated.
+    if (invite.move_poster_id) {
+      const who = await activePoster(db, invite.move_poster_id);
+      if (!who) return json({ error: 'invite_invalid' }, 401);
+      const moved = randomToken();
+      await db.prepare('UPDATE posters SET token_hash = ?2 WHERE id = ?1')
+        .bind(who.id, await sha256hex(moved)).run();
+      await db.prepare(
+        "UPDATE invites SET used_at = datetime('now'), used_by = ?2 WHERE id = ?1",
+      ).bind(invite.id, who.id).run();
+      const t = await db.prepare('SELECT name FROM teams WHERE id = ?1').bind(who.team_id).first();
+      return json({ token: moved, team: t?.name ?? '', role: who.role, name: who.name, moved: true });
+    }
+
     const name = (body?.name || '').trim().slice(0, 60);
     const phone = (body?.phone || '').trim().slice(0, 20) || null;
     if (!name) return badRequest('a name is required');
-
-    const invite = await liveInvite(db, body?.token || '');
-    if (!invite) return json({ error: 'invite_invalid' }, 401);
 
     const token = randomToken();
     await db.prepare(
@@ -138,11 +160,31 @@ async function route(request, env, ctx, url) {
     return json({ poster: me.name, role: me.role, regions: publicRegions(await scopedRegions(db, me.team_id)) });
   }
 
+  // "I have a new phone." Anyone may move themselves — no admin errand, and no
+  // password to recover, because there was never a password. Deliberately
+  // short-lived: you are doing this with both phones in front of you.
+  if (method === 'POST' && path === '/api/me/move') {
+    if (!me) return unauthorized();
+    // Only one move link alive at a time, so an abandoned one can't linger.
+    await db.prepare(
+      `UPDATE invites SET revoked_at = datetime('now')
+       WHERE move_poster_id = ?1 AND used_at IS NULL AND revoked_at IS NULL`,
+    ).bind(me.id).run();
+    const token = randomToken();
+    await db.prepare(
+      `INSERT INTO invites (token_hash, team_id, role, note, created_by, expires_at, move_poster_id)
+       VALUES (?1, ?2, ?3, ?4, ?5, datetime('now', '+30 minutes'), ?5)`,
+    ).bind(await sha256hex(token), me.team_id, me.role, `move: ${me.name}`, me.id).run();
+    const row = await db.prepare('SELECT expires_at FROM invites WHERE token_hash = ?1')
+      .bind(await sha256hex(token)).first();
+    return json({ url: `${publicOrigin(url)}/join#t=${token}`, expires_at: row.expires_at }, 201);
+  }
+
   if (method === 'POST' && path === '/api/notices') {
     if (!me) return unauthorized();
     const body = await request.json().catch(() => null);
     if (!body) return badRequest('invalid json');
-    const { region: slug, from, to, kind = 'cut' } = body;
+    const { from, to, kind = 'cut' } = body;
     const reason_en = String(body.reason_en ?? '').trim().slice(0, 200);
     const reason_hi = String(body.reason_hi ?? '').trim().slice(0, 200);
     if (!['cut', 'advisory', 'restored'].includes(kind)) return badRequest('bad kind');
@@ -150,29 +192,58 @@ async function route(request, env, ctx, url) {
       return badRequest('bad window');
     }
     if (!reason_en && !reason_hi) return badRequest('a reason, in either language');
-    const region = (await scopedRegions(db, me.team_id)).find((r) => r.slug === slug);
-    if (!region) return forbidden('not your area');
-    const id = randomId('ntc');
-    await db.prepare(
-      `INSERT INTO notices (id, region_id, kind, win_from, win_to, reason_en, reason_hi, posted_by)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
-    ).bind(id, region.id, kind, from, to, reason_en, reason_hi, me.id).run();
-    ctx.waitUntil(notifyRegion(db, env, region.id));
-    return json({ id, status: 'scheduled' }, 201);
+
+    // One area or several. `region` (singular) still works for anything older.
+    const wanted = Array.isArray(body.regions) && body.regions.length
+      ? [...new Set(body.regions.map(String))]
+      : (body.region ? [String(body.region)] : []);
+    if (wanted.length === 0) return badRequest('pick at least one area');
+    if (wanted.length > 25) return badRequest('too many areas at once');
+
+    const mine = await scopedRegions(db, me.team_id);
+    const targets = wanted.map((slug) => mine.find((r) => r.slug === slug));
+    if (targets.some((r) => !r)) return forbidden('not your area');
+
+    // One row per area, tied together so they can be cancelled as one act.
+    const batch = randomId('bat');
+    const ids = [];
+    for (const region of targets) {
+      const id = randomId('ntc');
+      ids.push(id);
+      await db.prepare(
+        `INSERT INTO notices (id, region_id, kind, win_from, win_to, reason_en, reason_hi, posted_by, batch_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+      ).bind(id, region.id, kind, from, to, reason_en, reason_hi, me.id, batch).run();
+    }
+    // Notify across all of them at once: somebody subscribed to two of these
+    // areas is still one person, and still gets one buzz.
+    ctx.waitUntil(notifyRegions(db, env, targets.map((r) => r.id)));
+    return json({ ids, batch_id: batch, areas: targets.length, status: 'scheduled' }, 201);
   }
 
   const cancel = path.match(/^\/api\/notices\/(ntc_[a-z0-9]+)\/cancel$/);
   if (method === 'POST' && cancel) {
     if (!me) return unauthorized();
     const notice = await db.prepare(
-      "SELECT id, region_id FROM notices WHERE id = ?1 AND status = 'scheduled'",
+      "SELECT id, region_id, batch_id FROM notices WHERE id = ?1 AND status = 'scheduled'",
     ).bind(cancel[1]).first();
     if (!notice) return notFound();
-    const allowed = (await scopedRegions(db, me.team_id)).some((r) => r.id === notice.region_id);
-    if (!allowed) return forbidden('not your area');
-    await db.prepare("UPDATE notices SET status = 'cancelled' WHERE id = ?1").bind(notice.id).run();
-    ctx.waitUntil(notifyRegion(db, env, notice.region_id));
-    return json({ id: notice.id, status: 'cancelled' });
+    const mine = await scopedRegions(db, me.team_id);
+    if (!mine.some((r) => r.id === notice.region_id)) return forbidden('not your area');
+
+    // Cancelling one area of a multi-area notice cancels the whole thing —
+    // it was posted as one act, so it is untrue to un-post only part of it.
+    const siblings = notice.batch_id
+      ? (await db.prepare(
+          "SELECT id, region_id FROM notices WHERE batch_id = ?1 AND status = 'scheduled'",
+        ).bind(notice.batch_id).all()).results
+      : [notice];
+    const reachable = siblings.filter((n) => mine.some((r) => r.id === n.region_id));
+    for (const n of reachable) {
+      await db.prepare("UPDATE notices SET status = 'cancelled' WHERE id = ?1").bind(n.id).run();
+    }
+    ctx.waitUntil(notifyRegions(db, env, reachable.map((n) => n.region_id)));
+    return json({ ids: reachable.map((n) => n.id), status: 'cancelled' });
   }
 
   if (method === 'GET' && path === '/api/team/notices') {
@@ -182,6 +253,7 @@ async function route(request, env, ctx, url) {
     const marks = regions.map((_, i) => `?${i + 1}`).join(',');
     const { results } = await db.prepare(
       `SELECT n.id, n.kind, n.win_from, n.win_to, n.reason_en, n.reason_hi, n.status, n.posted_at,
+              n.batch_id,
               r.slug AS region_slug, r.name_en AS region_en, r.name_hi AS region_hi,
               p.name AS poster_name
        FROM notices n
@@ -193,6 +265,7 @@ async function route(request, env, ctx, url) {
     return json({
       notices: results.map((n) => ({
         ...publicNotice(n),
+        batch_id: n.batch_id,
         by: n.poster_name,
         region: { slug: n.region_slug, name_en: n.region_en, name_hi: n.region_hi },
       })),
@@ -364,18 +437,34 @@ async function route(request, env, ctx, url) {
     if (!sub) return notFound();
     const { results } = await db.prepare(
       `SELECT n.id, n.kind, n.win_from, n.win_to, n.reason_en, n.reason_hi, n.status, n.posted_at,
-              r.name_en AS region_en, r.name_hi AS region_hi
+              n.batch_id, r.name_en AS region_en, r.name_hi AS region_hi
        FROM notices n
        JOIN regions r ON r.id = n.region_id
        JOIN subscription_regions sr ON sr.region_id = n.region_id
        WHERE sr.subscription_id = ?1
          AND datetime(n.posted_at) > datetime('now', '-2 days')
          AND datetime(n.win_to) > datetime('now')
-       ORDER BY datetime(n.posted_at) DESC LIMIT 5`,
+       ORDER BY datetime(n.posted_at) DESC LIMIT 12`,
     ).bind(sub.id).all();
+    // One posting act = one notification, even when it covered several of the
+    // areas this person follows. Collapse the batch and name all of them.
+    const seen = new Map();
+    for (const n of results) {
+      const key = n.batch_id || n.id;
+      if (!seen.has(key)) {
+        seen.set(key, { ...publicNotice(n), en: [n.region_en], hi: [n.region_hi] });
+      } else {
+        const g = seen.get(key);
+        g.en.push(n.region_en);
+        g.hi.push(n.region_hi);
+      }
+    }
     return json({
       lang: sub.lang,
-      notices: results.map((n) => ({ ...publicNotice(n), region: { name_en: n.region_en, name_hi: n.region_hi } })),
+      notices: [...seen.values()].map(({ en, hi, ...n }) => ({
+        ...n,
+        region: { name_en: en.join(' · '), name_hi: hi.join(' · ') },
+      })),
     });
   }
 
@@ -424,11 +513,18 @@ async function authPoster(db, request) {
 async function liveInvite(db, token) {
   if (!token || typeof token !== 'string') return null;
   return db.prepare(
-    `SELECT id, team_id, role, expires_at FROM invites
+    `SELECT id, team_id, role, expires_at, move_poster_id FROM invites
      WHERE token_hash = ?1
        AND used_at IS NULL AND revoked_at IS NULL
        AND datetime(expires_at) > datetime('now')`,
   ).bind(await sha256hex(token)).first();
+}
+
+/** A poster who still exists and has not been removed. */
+async function activePoster(db, id) {
+  return db.prepare(
+    'SELECT id, team_id, name, role FROM posters WHERE id = ?1 AND revoked_at IS NULL',
+  ).bind(id).first();
 }
 
 /** A team's own regions plus every descendant team's. */

@@ -17,6 +17,7 @@
   <header class="masthead">
     <img src="/icon.svg" alt="" aria-hidden="true">
     <b>kuhu</b>
+    <span class="beta">beta</span>
     <div class="lang" role="group" aria-label="Language">
       <button type="button" data-lang="en" aria-pressed="true">English</button>
       <button type="button" data-lang="hi" aria-pressed="false">हिंदी</button>
@@ -39,17 +40,19 @@
   <!-- link is good -->
   <section id="ok" class="hidden">
     <h1 id="invite-head"></h1>
-    <p class="lede" data-s="join_lede2"></p>
+    <p class="lede" id="invite-lede"></p>
 
-    <label class="field">
-      <span data-s="your_name">Your name</span>
-      <input id="name" autocomplete="name" enterkeyhint="done">
-    </label>
+    <div id="new-fields">
+      <label class="field">
+        <span data-s="your_name">Your name</span>
+        <input id="name" autocomplete="name" enterkeyhint="done">
+      </label>
 
-    <label class="field">
-      <span data-s="your_phone">Phone number (optional)</span>
-      <input id="phone" type="tel" autocomplete="tel" inputmode="tel">
-    </label>
+      <label class="field">
+        <span data-s="your_phone">Phone number (optional)</span>
+        <input id="phone" type="tel" autocomplete="tel" inputmode="tel">
+      </label>
+    </div>
 
     <button id="join" class="big" type="button" data-s="join">Join</button>
   </section>

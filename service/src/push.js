@@ -41,16 +41,28 @@ async function vapidAuth(endpoint, env) {
   return `vapid t=${unsigned}.${b64url(sig)}, k=${env.VAPID_PUBLIC_KEY}`;
 }
 
-/**
- * Tickle every subscription listening to a region. Dead endpoints (404/410)
- * are pruned. Runs in ctx.waitUntil — the poster never waits on fan-out.
- */
+/** Tickle everyone listening to one region. */
 export async function notifyRegion(db, env, regionId) {
+  return notifyRegions(db, env, [regionId]);
+}
+
+/**
+ * Tickle every subscription listening to ANY of these regions — each one once,
+ * however many of the regions they follow. A notice about four areas is still
+ * one thing that happened, and one buzz is the whole promise of this app.
+ *
+ * Dead endpoints (404/410) are pruned. Runs in ctx.waitUntil, so the poster
+ * never waits on fan-out.
+ */
+export async function notifyRegions(db, env, regionIds) {
+  const ids = [...new Set(regionIds)].filter((id) => id != null);
+  if (ids.length === 0) return;
+  const marks = ids.map((_, i) => `?${i + 1}`).join(',');
   const { results: subs } = await db.prepare(
-    `SELECT s.id, s.endpoint FROM subscriptions s
+    `SELECT DISTINCT s.id, s.endpoint FROM subscriptions s
      JOIN subscription_regions sr ON sr.subscription_id = s.id
-     WHERE sr.region_id = ?1`,
-  ).bind(regionId).all();
+     WHERE sr.region_id IN (${marks})`,
+  ).bind(...ids).all();
 
   for (const sub of subs) {
     try {

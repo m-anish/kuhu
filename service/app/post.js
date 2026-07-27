@@ -8,7 +8,7 @@ let token = localStorage.getItem('kuhu.token') || '';
 let team = localStorage.getItem('kuhu.team') || '';
 let role = localStorage.getItem('kuhu.role') || 'poster';
 let areas = [];
-let sel = { region: null, kind: 'cut', reason: null };
+let sel = { regions: new Set(), kind: 'cut', reason: null };
 let inviteSel = { role: 'poster', hours: 48 };
 let lastInviteUrl = '';
 
@@ -92,17 +92,21 @@ async function showPostView() {
   }
 }
 
+/** Areas are multi-select: one outage often crosses several of them. */
 function paintAreas() {
   const box = $('#areas');
   box.textContent = '';
-  if (areas.length === 1) sel.region = areas[0].slug;
+  if (areas.length === 1) sel.regions.add(areas[0].slug);
   for (const a of areas) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'chip';
     b.textContent = lang === 'hi' ? a.name_hi : a.name_en;
-    b.setAttribute('aria-pressed', String(sel.region === a.slug));
-    b.addEventListener('click', () => { sel.region = a.slug; paintAreas(); });
+    b.setAttribute('aria-pressed', String(sel.regions.has(a.slug)));
+    b.addEventListener('click', () => {
+      sel.regions.has(a.slug) ? sel.regions.delete(a.slug) : sel.regions.add(a.slug);
+      paintAreas();
+    });
     box.append(b);
   }
 }
@@ -182,7 +186,7 @@ function paintReasons() {
 async function publish() {
   const free = $('#reason-free').value.trim();
   const preset = sel.reason !== null ? REASONS[sel.reason] : null;
-  if (!sel.region) return say(t('pick_one'), 'bad');
+  if (sel.regions.size === 0) return say(t('pick_one'), 'bad');
   if (!preset && !free) return say(t('need_reason'), 'bad');
   const from = localToIso($('#from').value);
   const to = localToIso($('#to').value);
@@ -191,7 +195,7 @@ async function publish() {
   // A preset carries both languages. Free text is only what was actually typed —
   // kuhu does not invent a translation it cannot vouch for.
   const body = {
-    region: sel.region,
+    regions: [...sel.regions],
     kind: sel.kind,
     from,
     to,
@@ -207,7 +211,8 @@ async function publish() {
       const err = await res.json().catch(() => ({}));
       return say(err.error || 'error', 'bad');
     }
-    say(t('published'), 'ok');
+    const out = await res.json();
+    say(out.areas > 1 ? t('published_many').replace('{n}', out.areas) : t('published'), 'ok');
     $('#reason-free').value = '';
     sel.reason = null;
     paintReasons();
@@ -228,14 +233,26 @@ async function loadMine() {
     box.innerHTML = `<p class="empty">${t('none_upcoming')}</p>`;
     return;
   }
+
+  // Rows posted together are shown together — one card listing its areas,
+  // because that is what the lineman actually did.
+  const groups = [];
+  const byBatch = new Map();
   for (const n of notices) {
+    const key = n.batch_id || n.id;
+    if (!byBatch.has(key)) { const g = { head: n, items: [] }; byBatch.set(key, g); groups.push(g); }
+    byBatch.get(key).items.push(n);
+  }
+
+  for (const g of groups) {
+    const n = g.head;
     const el = document.createElement('div');
     el.className = `notice${n.status === 'cancelled' ? ' cancelled' : ''}`;
-    const region = lang === 'hi' ? n.region.name_hi : n.region.name_en;
+    const names = g.items.map((i) => (lang === 'hi' ? i.region.name_hi : i.region.name_en)).join(' · ');
     const why = (lang === 'hi' ? n.reason.hi : n.reason.en) || n.reason.en || n.reason.hi || '';
     el.innerHTML = `
       <div class="meta">
-        <span>${escapeHtml(region)}</span>
+        <span>${escapeHtml(names)}</span>
         <span class="kind">${escapeHtml(n.status === 'cancelled' ? t('cancelled_label') : t(`kind_${n.kind}`))}</span>
       </div>
       <div class="when">${escapeHtml(fmtWindow(n.from, n.to, lang))}</div>
@@ -492,6 +509,38 @@ async function addArea() {
   }
 }
 
+// ---------- moving to a new phone ----------
+
+let moveUrl = '';
+
+async function makeMove() {
+  const btn = $('#move');
+  btn.disabled = true;
+  try {
+    const res = await api('/api/me/move', { method: 'POST' });
+    if (!res.ok) return say((await res.json().catch(() => ({}))).error || 'error', 'bad');
+    moveUrl = (await res.json()).url;
+    $('#move-url').textContent = moveUrl;
+    $('#move-result').classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function shareMove() {
+  if (!moveUrl) return;
+  if (navigator.share) {
+    try { await navigator.share({ text: moveUrl }); return; } catch { /* cancelled */ }
+  }
+  window.open(`https://wa.me/?text=${encodeURIComponent(moveUrl)}`, '_blank', 'noopener');
+}
+
+async function copyMove() {
+  if (!moveUrl) return;
+  try { await navigator.clipboard.writeText(moveUrl); say(t('copied'), 'ok'); }
+  catch { say(moveUrl, 'ok'); }
+}
+
 // ---------- wiring ----------
 
 for (const b of document.querySelectorAll('.lang button')) {
@@ -513,6 +562,9 @@ $('#copy-link').addEventListener('click', copyInvite);
 $('#add-area').addEventListener('click', addArea);
 $('#new-en').addEventListener('input', suggestSlug);
 $('#new-slug').addEventListener('input', (e) => { e.target.dataset.touched = '1'; });
+$('#move').addEventListener('click', makeMove);
+$('#move-share').addEventListener('click', shareMove);
+$('#move-copy').addEventListener('click', copyMove);
 
 paintStrings();
 if (token) {

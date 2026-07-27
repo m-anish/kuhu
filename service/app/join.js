@@ -27,8 +27,19 @@ function paintStrings() {
 }
 
 function paintInvite() {
+  if (invite.move) {
+    // Moving an existing person: nothing to fill in, they are already known.
+    $('#invite-head').textContent = t('move_head').replace('{name}', invite.name);
+    $('#invite-lede').textContent = t('move_lede');
+    $('#new-fields').classList.add('hidden');
+    $('#join').textContent = t('move_confirm');
+    return;
+  }
   const role = invite.role === 'admin' ? t('role_admin') : t('role_poster');
   $('#invite-head').textContent = t('join_as').replace('{team}', invite.team).replace('{role}', role);
+  $('#invite-lede').textContent = t('join_lede2');
+  $('#new-fields').classList.remove('hidden');
+  $('#join').textContent = t('join');
 }
 
 function say(msg, kind = 'bad') {
@@ -58,15 +69,16 @@ async function check() {
 }
 
 async function join() {
-  const name = $('#name').value.trim();
-  if (!name) return say(t('need_name'));
+  const moving = Boolean(invite?.move);
+  const name = moving ? '' : $('#name').value.trim();
+  if (!moving && !name) return say(t('need_name'));
   const btn = $('#join');
   btn.disabled = true;
   try {
     const res = await fetch('/api/invites/redeem', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ token, name, phone: $('#phone').value.trim() }),
+      body: JSON.stringify(moving ? { token } : { token, name, phone: $('#phone').value.trim() }),
     });
     if (!res.ok) { show('dead'); return; }
     const data = await res.json();

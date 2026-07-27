@@ -17,6 +17,7 @@
   <header class="masthead">
     <img src="/icon.svg" alt="" aria-hidden="true">
     <b>kuhu</b>
+    <span class="beta">beta</span>
     <div class="lang" role="group" aria-label="Language">
       <button type="button" data-lang="en" aria-pressed="true">English</button>
       <button type="button" data-lang="hi" aria-pressed="false">हिंदी</button>
@@ -121,7 +122,19 @@
       </div>
     </section>
 
-    <p style="margin-top:2rem">
+    <div class="panel" style="margin-top:2rem">
+      <h3 data-s="move_title">Got a new phone?</h3>
+      <p class="hint-p" data-s="move_help"></p>
+      <button id="move" class="big ghost" type="button" data-s="move_make">Move me to a new phone</button>
+      <div id="move-result" class="hidden" style="margin-top:1rem">
+        <div class="linkbox" id="move-url"></div>
+        <p class="hint-p" data-s="move_warn"></p>
+        <button id="move-share" class="big" type="button" data-s="share_whatsapp">Share on WhatsApp</button>
+        <button id="move-copy" class="big ghost" type="button" data-s="copy_link">Copy link</button>
+      </div>
+    </div>
+
+    <p style="margin-top:1.4rem">
       <button id="signout" class="big ghost" type="button" data-s="sign_out">Sign out of this phone</button>
     </p>
   </section>

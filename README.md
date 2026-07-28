@@ -102,6 +102,7 @@ using it. It has not met a monsoon. See
 | Path | What |
 |---|---|
 | [`site/`](site/) | Marketing/landing site (Cloudflare Pages → kuhu.starstucklab.com) |
+| [`docs/roles.md`](docs/roles.md) | Who's who: subscriber, poster, service admin, site admin |
 | [`docs/concept.md`](docs/concept.md) | The product concept and every settled decision |
 | [`docs/roadmap.md`](docs/roadmap.md) | What's next, what's refused, and why |
 | [`service/`](service/) | The service itself — Cloudflare Worker + D1 + the two-faced PWA |

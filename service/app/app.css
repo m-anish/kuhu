@@ -823,3 +823,16 @@ html[lang='hi'] [data-guide-lang='en'] { display: none; }
    but not individually selectable while the region choice is what counts. */
 .covered { opacity: 0.55; }
 .covered button { cursor: default; }
+
+/* The People list is grouped by team, because it is not one team — it is your
+   whole branch of the tree, and seeing the team names is how the shape of the
+   thing becomes visible at all. */
+.team-head {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mute);
+  margin: 1.1rem 0 0.4rem;
+}
+
+.team-head:first-child { margin-top: 0.2rem; }

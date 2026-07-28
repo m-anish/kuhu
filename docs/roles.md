@@ -25,6 +25,14 @@ kuhu                        ← site admin: everything
         └── Local line crew ← posters: their own areas
 ```
 
+**Those three names are real teams.** `kuhu` is the one at the top — it isn't a
+placeholder, it's where site admins live. Under it sits one team per service,
+and under those, the crews.
+
+When you invite a poster and pick their areas, kuhu makes them a crew named
+after those areas — so the list of teams grows as you go, and each name tells
+you what that group covers.
+
 Plus subscribers, who sit outside all of it and just receive.
 
 **Two different things decide what you can do:**
@@ -125,6 +133,10 @@ Admin → People:
 **The link works once, then dies.** It also expires. Their role was set by you before the link existed — nothing for them to choose or get wrong.
 
 Sent it to the wrong person? **Cancel link**, before they open it.
+
+> **"People" is not one team.** It's everyone in your branch of the tree,
+> grouped under the team each person sits in. A site admin sees several groups;
+> a poster's crew is just one of them.
 
 ### 2 · Take people out
 

@@ -169,6 +169,9 @@ export const STRINGS = {
     foot_repo: 'Source on GitHub',
     foot_site: 'About kuhu',
     foot_help: 'Help',
+    // people
+    members_help: 'Everyone at or below you in the tree, grouped by the team they sit in. You can only see, and act on, your own branch.',
+    members_help_one: 'Everyone on your team. The line under each name is what they are allowed to do.',
     // invite scope
     invite_which_areas: 'Which areas',
     invite_areas_help: 'What this poster answers for. Pick a region and everything inside it is included — including areas added later. Pick nothing and they get the crew as it stands.',
@@ -239,7 +242,7 @@ export const STRINGS = {
     state_expired: 'expired',
     state_revoked: 'cancelled',
     revoke: 'Cancel link',
-    members: 'Your team',
+    members: 'People',
     remove_member: 'Remove',
     removed_ok: 'Removed. That phone is signed out.',
     last_admin: 'That is the last site admin — make someone else one first.',
@@ -380,6 +383,9 @@ export const STRINGS = {
     foot_repo: 'GitHub पर कोड',
     foot_site: 'kuhu के बारे में',
     foot_help: 'मदद',
+    // people
+    members_help: 'आपके नीचे के सारे लोग, अपनी-अपनी टीम के हिसाब से। आपको सिर्फ़ अपनी शाखा दिखती है, और उसी पर आपका ज़ोर चलता है।',
+    members_help_one: 'आपकी टीम के सब लोग। नाम के नीचे लिखा है कि वे क्या कर सकते हैं।',
     // invite scope
     invite_which_areas: 'कौन-से इलाके',
     invite_areas_help: 'यह व्यक्ति किन इलाकों के लिए ज़िम्मेदार है। कोई क्षेत्र चुनेंगे तो उसके अंदर सब शामिल — बाद में जोड़े गए इलाके भी। कुछ न चुनें तो उन्हें मौजूदा टीम मिल जाती है।',
@@ -448,7 +454,7 @@ export const STRINGS = {
     state_expired: 'समय ख़त्म',
     state_revoked: 'रद्द',
     revoke: 'लिंक रद्द करें',
-    members: 'आपकी टीम',
+    members: 'लोग',
     remove_member: 'हटाएँ',
     removed_ok: 'हटा दिया। वह फ़ोन साइन आउट हो गया।',
     last_admin: 'यह आख़िरी साइट एडमिन हैं — पहले किसी और को बनाइए।',

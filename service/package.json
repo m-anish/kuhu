@@ -14,10 +14,12 @@
     "vapid": "node tools/gen-vapid.mjs",
     "vendor:jsqr": "node tools/vendor-jsqr.mjs",
     "test:qr": "node tools/qr-selftest.mjs",
-    "test:tree": "node tools/tree-selftest.mjs"
+    "test:tree": "node tools/tree-selftest.mjs",
+    "test:ui": "node tools/ui-selftest.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.1",
+    "jsdom": "^30.0.0",
     "jsqr": "^1.4.0",
     "qrcode": "^1.5.4",
     "wrangler": "^4.50.0"

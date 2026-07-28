@@ -17,7 +17,6 @@ let me = null;                       // { name, role, team, services[], can{} }
 let svc = null;                      // the service currently being posted to
 let sel = { regions: new Set(), kind: null, reason: null };
 let inviteSel = { role: 'poster', hours: 48, service: null, areas: new Set() };
-let teams = [];
 let lastInviteUrl = '';
 let moveUrl = '';
 
@@ -385,7 +384,10 @@ function paintAdmin() {
   $('#acc-areas').classList.toggle('hidden', !can.manage_coverage);
   $('#geography').classList.toggle('hidden', !can.manage_areas);
   if (!can.manage_people) return;
-  loadTeams();
+  // Draw the invite form. This used to ride on the back of loadTeams(), and
+  // when that fetch stopped being needed the whole form went blank — labels
+  // are static markup, chips are not. It is called for its own sake now.
+  paintInviteControls();
   loadInvites();
   loadMembers();
   paintCoverage();
@@ -428,11 +430,6 @@ function paintInviteControls() {
     b.addEventListener('click', () => { inviteSel.hours = h; paintInviteControls(); });
     hoursBox.append(b);
   }
-}
-
-async function loadTeams() {
-  const res = await api('/api/teams');
-  teams = res.ok ? ((await res.json()).teams || []) : [];
 }
 
 /**
@@ -656,10 +653,31 @@ async function loadMembers() {
   const { members } = await res.json();
   $('#count-people').textContent = String(members.filter((m) => !m.revoked_at).length);
   box.textContent = '';
+
+  // Grouped by team, because this list is not one team — it is everyone in
+  // your branch of the tree, and for a site admin that spans all of them.
+  // Printing the team on each row instead made "kuhu" look like a stray word.
+  const byTeam = new Map();
   for (const m of members) {
+    if (!byTeam.has(m.team_name)) byTeam.set(m.team_name, []);
+    byTeam.get(m.team_name).push(m);
+  }
+  $('#members-help').textContent = byTeam.size > 1 ? t('members_help') : t('members_help_one');
+
+  for (const [teamName, people] of byTeam) {
+    const head = document.createElement('h5');
+    head.className = 'team-head';
+    head.textContent = teamName;
+    box.append(head);
+    for (const m of people) paintMember(box, m);
+  }
+}
+
+function paintMember(box, m) {
+  {
     const el = document.createElement('div');
     el.className = `row${m.revoked_at ? ' dim' : ''}`;
-    const bits = [t(`role_${m.role}`), m.team_name];
+    const bits = [t(`role_${m.role}`)];
     if (m.phone) bits.push(m.phone);
     if (m.revoked_at) bits.push(t('state_revoked'));
     el.innerHTML = `

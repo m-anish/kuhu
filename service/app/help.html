@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>kuhu — help</title>
+<meta name="theme-color" content="#0c0f0c" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f6f5ef" media="(prefers-color-scheme: light)">
+<meta name="robots" content="noindex">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <img src="/icon.svg" alt="" aria-hidden="true">
+    <b>kuhu</b>
+    <span class="beta">beta</span>
+    <div class="mast-controls">
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-lang="en" aria-pressed="true" aria-label="English" title="English">EN</button>
+        <button type="button" data-lang="hi" aria-pressed="false" aria-label="हिंदी" title="हिंदी">हिं</button>
+      </div>
+      <button id="theme" class="theme-btn" type="button" aria-label="Theme"><span class="theme-icon" aria-hidden="true">◐</span></button>
+    </div>
+  </header>
+
+  <h1 data-s="help_title">How kuhu works</h1>
+  <p class="lede" id="help-lede"></p>
+
+  <!-- Which guide to read. Only the ones your role can use are shown. -->
+  <div id="guide-picker" class="chips hidden" style="margin-bottom:1.6rem"></div>
+
+  <!-- ============ NOT SIGNED IN ============ -->
+  <section id="help-anon">
+    <div class="panel">
+      <h3 data-s="help_signed_out">Signed out</h3>
+      <p class="hint-p" data-s="help_signed_out_body"></p>
+      <a class="big ghost" href="/post" style="display:block;text-align:center;text-decoration:none" data-s="post_link">Team login</a>
+    </div>
+
+    <h2 data-s="help_everyone">For everyone</h2>
+    <div data-guide-lang="en">
+      <p>kuhu tells you before something in your neighbourhood goes off — the power,
+      the water, whatever a local crew keeps running. On the main screen you pick
+      the areas you care about, tap <em>Notify me</em>, and then hear nothing until
+      there is something worth hearing.</p>
+      <p>One notification per notice. No newsletters, no reminders, no festive
+      greetings. If a notice is cancelled you are told that too, once.</p>
+    </div>
+    <div data-guide-lang="hi">
+      <p>kuhu आपको पहले बता देता है कि मोहल्ले में कुछ बंद होने वाला है — बिजली,
+      पानी, या जो भी कोई स्थानीय टीम चलाती है। मुख्य पन्ने पर अपने इलाके चुनिए,
+      <em>मुझे सूचित करें</em> दबाइए, और फिर तब तक कुछ नहीं सुनेंगे जब तक सुनने
+      लायक कुछ न हो।</p>
+      <p>हर सूचना पर एक ही नोटिफिकेशन। न कोई विज्ञापन, न याद दिलाना, न त्योहार की
+      बधाई। सूचना रद्द हो जाए तो वह भी एक बार बता दिया जाता है।</p>
+    </div>
+  </section>
+
+  <!-- ============ POSTER ============ -->
+  <article id="guide-poster" class="guide hidden">
+    <div data-guide-lang="en">
+      <h2>Posting a notice</h2>
+      <p>You are on a crew. Your job in kuhu is one screen long: say what is
+      happening, where, and when. Everyone subscribed to those areas hears about
+      it once.</p>
+
+      <p>Open <strong>Post a notice</strong> and work down the card.</p>
+
+      <h3>1 · Kind of notice</h3>
+      <p>What sort of thing this is. Your service decides the choices — an
+      electricity crew sees these:</p>
+      <div class="chips demo">
+        <button class="chip" type="button" aria-pressed="true" tabindex="-1">Power cut</button>
+        <button class="chip" type="button" tabindex="-1">Advisory</button>
+        <button class="chip" type="button" tabindex="-1">Restored</button>
+      </div>
+
+      <h3>2 · Area</h3>
+      <p>Tap every area affected — you can pick several, and it still counts as
+      one notice. Somebody who follows three of them gets <em>one</em>
+      notification, not three.</p>
+      <div class="chips demo">
+        <button class="chip" type="button" aria-pressed="true" tabindex="-1">Naddi</button>
+        <button class="chip" type="button" aria-pressed="true" tabindex="-1">McLeodganj</button>
+        <button class="chip" type="button" tabindex="-1">Sidhpur</button>
+      </div>
+
+      <h3>3 · When</h3>
+      <p>The three shortcuts fill in the start and end for you — those two fields
+      flash when they do, because <em>they</em> are what actually gets sent. Change
+      them by hand whenever the shortcut is close but not right.</p>
+      <div class="chips demo">
+        <button class="chip" type="button" tabindex="-1">Next 2 hours</button>
+        <button class="chip" type="button" tabindex="-1">This evening</button>
+        <button class="chip" type="button" tabindex="-1">Tomorrow morning</button>
+      </div>
+
+      <h3>4 · Reason</h3>
+      <p>Tap a ready-made reason if one fits — those come with the Hindi already
+      written, so both languages go out correctly. If you type your own instead,
+      it is sent only in the language you typed it in. kuhu will not invent a
+      translation it cannot vouch for.</p>
+
+      <h3>Then send it</h3>
+      <p>Press <strong>Publish notice</strong>. It goes out as a phone
+      notification, into the Telegram channel, and to any device listening — all
+      at once.</p>
+
+      <h3>Getting it wrong</h3>
+      <p>Open <strong>Recent notices</strong> and press <em>Cancel</em>. Everyone
+      who was told is told that it is off. If you posted to four areas, cancelling
+      cancels all four — it was one act.</p>
+      <div class="notice demo">
+        <div class="meta"><span>Naddi · McLeodganj</span><span class="kind">⚡ Power cut</span></div>
+        <div class="when">Tue, 28 July, 4:00 pm to 6:00 pm</div>
+        <div class="why">Line maintenance</div>
+      </div>
+
+      <h3>New phone?</h3>
+      <p>Under <strong>This phone</strong>, press <em>Move me to a new phone</em>
+      on the old one and open the link on the new one within 30 minutes. You keep
+      your name and your history; the old phone signs out. You never had a
+      password, so there is nothing to remember or forget.</p>
+      <p>If the phone is lost, ask your admin — they can remove it and send you a
+      fresh invite.</p>
+    </div>
+
+    <div data-guide-lang="hi">
+      <h2>सूचना डालना</h2>
+      <p>आप एक टीम में हैं। kuhu में आपका काम एक ही पन्ने का है: क्या हो रहा है,
+      कहाँ, और कब। उन इलाकों से जुड़े सभी लोगों को एक बार पता चल जाता है।</p>
+
+      <p><strong>सूचना डालें</strong> खोलिए और ऊपर से नीचे भरते जाइए।</p>
+
+      <h3>1 · सूचना किस बारे में</h3>
+      <p>किस तरह की बात है। विकल्प आपकी सेवा तय करती है — बिजली की टीम को ये
+      दिखते हैं:</p>
+      <div class="chips demo">
+        <button class="chip" type="button" aria-pressed="true" tabindex="-1">बिजली कटौती</button>
+        <button class="chip" type="button" tabindex="-1">सूचना</button>
+        <button class="chip" type="button" tabindex="-1">बिजली बहाल</button>
+      </div>
+
+      <h3>2 · इलाका</h3>
+      <p>जितने इलाके प्रभावित हैं, सब दबाइए — एक से ज़्यादा चुन सकते हैं, फिर भी
+      यह एक ही सूचना रहती है। जो व्यक्ति तीनों इलाके फ़ॉलो करता है उसे
+      <em>एक</em> ही नोटिफिकेशन जाएगा, तीन नहीं।</p>
+      <div class="chips demo">
+        <button class="chip" type="button" aria-pressed="true" tabindex="-1">नड्डी</button>
+        <button class="chip" type="button" aria-pressed="true" tabindex="-1">मैक्लोडगंज</button>
+        <button class="chip" type="button" tabindex="-1">सिद्धपुर</button>
+      </div>
+
+      <h3>3 · कब</h3>
+      <p>तीन शॉर्टकट शुरू और ख़त्म का समय अपने आप भर देते हैं — भरते ही वे दोनों
+      ख़ाने चमकते हैं, क्योंकि असल में वही भेजे जाते हैं। शॉर्टकट ठीक न बैठे तो
+      हाथ से बदल दीजिए।</p>
+
+      <h3>4 · वजह</h3>
+      <p>कोई तैयार वजह जँचे तो उसे दबाइए — उनके साथ हिंदी पहले से लिखी होती है,
+      इसलिए दोनों भाषाओं में सही जाती है। अपनी वजह ख़ुद लिखेंगे तो वह सिर्फ़ उसी
+      भाषा में जाएगी जिसमें लिखी है। kuhu ऐसा अनुवाद नहीं गढ़ता जिसकी वह ज़िम्मेदारी
+      न ले सके।</p>
+
+      <h3>फिर भेज दीजिए</h3>
+      <p><strong>सूचना भेजें</strong> दबाइए। वह एक साथ फ़ोन के नोटिफिकेशन,
+      Telegram चैनल, और सुन रहे किसी भी उपकरण तक पहुँच जाती है।</p>
+
+      <h3>ग़लती हो जाए तो</h3>
+      <p><strong>हाल की सूचनाएँ</strong> खोलिए और <em>रद्द करें</em> दबाइए। जिन्हें
+      बताया गया था, उन्हें बता दिया जाता है कि अब नहीं है। चार इलाकों में डाली थी
+      तो चारों रद्द होंगी — वह एक ही काम था।</p>
+
+      <h3>नया फ़ोन?</h3>
+      <p><strong>यह फ़ोन</strong> के नीचे, पुराने फ़ोन पर <em>मुझे नए फ़ोन पर ले
+      जाएँ</em> दबाइए और 30 मिनट के अंदर नए फ़ोन पर वह लिंक खोलिए। आपका नाम और
+      काम साथ आ जाता है; पुराना फ़ोन साइन आउट हो जाता है। पासवर्ड कभी था ही नहीं,
+      इसलिए याद रखने या भूलने को कुछ नहीं।</p>
+      <p>फ़ोन खो जाए तो एडमिन से कहिए — वे उसे हटाकर नया निमंत्रण भेज सकते हैं।</p>
+    </div>
+  </article>
+
+  <!-- ============ SERVICE ADMIN ============ -->
+  <article id="guide-service-admin" class="guide hidden">
+    <div data-guide-lang="en">
+      <h2>Running a service</h2>
+      <p>You look after one service — electricity, or water, or whatever yours is
+      — and everything you see in the app is that service and nothing else. You can
+      do everything a poster can, plus three things they cannot.</p>
+
+      <h3>Bringing people in</h3>
+      <p>Under <strong>Admin → People</strong>, choose what the person will be,
+      how long the link should last, and press <em>Make invite link</em>.</p>
+      <div class="chips demo">
+        <button class="chip" type="button" aria-pressed="true" tabindex="-1">Poster</button>
+        <button class="chip" type="button" tabindex="-1">Service admin</button>
+      </div>
+      <p>Share it on WhatsApp. The link <strong>works once and then dies</strong>,
+      and expires anyway. Their role was decided by you before the link existed, so
+      there is nothing for them to choose or get wrong. If you send it to the wrong
+      person, press <em>Cancel link</em> before they open it.</p>
+
+      <h3>Taking people out</h3>
+      <p>Press <em>Remove</em> next to their name. Their phone stops working
+      immediately, but the notices they posted keep their name on them. You cannot
+      remove yourself, and you cannot remove anyone senior to you.</p>
+
+      <h3>Areas</h3>
+      <p>Under <strong>Admin → Areas</strong> — the heading names your service, so
+      you always know which map you are editing. Add an area, rename one, or tap it
+      to say whether your crew answers for it.</p>
+      <p>Two things worth knowing. The <em>short id</em> is permanent: it lives in
+      web addresses and in every subscriber's saved choices, so it cannot be changed
+      later — only the names can. And areas belong to <em>your</em> service alone:
+      an electricity feeder and a water zone divide the same valley differently, so
+      each service keeps its own list.</p>
+
+      <h3>What you cannot do</h3>
+      <p>Create a service, or touch another one. Those belong to a site admin. If
+      you need a second crew, or a service does not exist yet, ask them.</p>
+    </div>
+
+    <div data-guide-lang="hi">
+      <h2>एक सेवा चलाना</h2>
+      <p>आप एक सेवा देखते हैं — बिजली, या पानी, या जो भी आपकी है — और ऐप में आपको
+      वही सेवा दिखती है, उसके अलावा कुछ नहीं। सूचना डालने वाले जो कुछ कर सकते हैं
+      वह सब आप कर सकते हैं, और तीन चीज़ें ज़्यादा।</p>
+
+      <h3>लोगों को जोड़ना</h3>
+      <p><strong>एडमिन → लोग</strong> में तय कीजिए कि व्यक्ति क्या बनेगा, लिंक कब
+      तक चले, और <em>निमंत्रण लिंक बनाएँ</em> दबाइए।</p>
+      <p>उसे WhatsApp पर भेज दीजिए। लिंक <strong>एक बार चलता है और ख़त्म हो जाता
+      है</strong>, और वैसे भी उसकी समय-सीमा है। उनका काम आपने लिंक बनने से पहले ही
+      तय कर दिया था, इसलिए उनके पास चुनने या ग़लत करने को कुछ नहीं। ग़लत व्यक्ति को
+      चला जाए तो खुलने से पहले <em>लिंक रद्द करें</em> दबा दीजिए।</p>
+
+      <h3>लोगों को हटाना</h3>
+      <p>नाम के आगे <em>हटाएँ</em> दबाइए। उनका फ़ोन तुरंत बंद हो जाता है, पर उनकी
+      डाली हुई सूचनाओं पर उनका नाम बना रहता है। आप ख़ुद को नहीं हटा सकते, और न ही
+      अपने से ऊपर वालों को।</p>
+
+      <h3>इलाके</h3>
+      <p><strong>एडमिन → इलाके</strong> में — शीर्षक में आपकी सेवा का नाम लिखा
+      रहता है, ताकि पता रहे कि कौन-सा नक्शा बदल रहे हैं। इलाका जोड़िए, नाम बदलिए,
+      या दबाकर तय कीजिए कि आपकी टीम उसकी ज़िम्मेदारी लेती है या नहीं।</p>
+      <p>दो बातें याद रखिए। <em>छोटी आईडी</em> हमेशा के लिए है: वह वेब पतों में और
+      हर सदस्य की सहेजी हुई पसंद में रहती है, इसलिए बाद में बदली नहीं जा सकती —
+      सिर्फ़ नाम बदल सकते हैं। और इलाके सिर्फ़ <em>आपकी</em> सेवा के हैं: बिजली का
+      फ़ीडर और पानी का ज़ोन एक ही घाटी को अलग-अलग बाँटते हैं।</p>
+
+      <h3>जो आप नहीं कर सकते</h3>
+      <p>नई सेवा बनाना, या किसी और सेवा को छूना। वह साइट एडमिन का काम है। दूसरी टीम
+      चाहिए या सेवा अभी बनी ही नहीं, तो उनसे कहिए।</p>
+    </div>
+  </article>
+
+  <!-- ============ SITE ADMIN ============ -->
+  <article id="guide-site-admin" class="guide hidden">
+    <div data-guide-lang="en">
+      <h2>Running kuhu</h2>
+      <p>You sit above every service. Everything a service admin can do, you can do
+      in all of them — and one thing only you can do: make a service exist.</p>
+
+      <h3>How kuhu is arranged</h3>
+      <p>Three levels, and each one only sees its own part:</p>
+      <div class="tree demo">
+kuhu                        ← you: every service
+  └── Electricity           ← a service admin: one service
+        └── Local line crew ← posters: their own areas</div>
+      <p>A person's <em>role</em> decides what they may do; where they sit decides
+      what they can see. That is why a service admin never sees another service —
+      not because it is hidden from them, but because it is not below them.</p>
+
+      <h3>Creating a service</h3>
+      <p>Under <strong>Admin → Services</strong>. A service brings its own
+      vocabulary, and you write it as you create it:</p>
+      <ul>
+        <li><strong>Kinds of notice</strong> — what it can announce. Water might
+        say <em>No supply</em> and <em>Tanker coming</em>; electricity says
+        <em>Power cut</em>. Both languages, because a reader sees whichever they
+        chose.</li>
+        <li><strong>Areas</strong> — how this service divides the map. Give it at
+        least one: a service with no areas cannot be subscribed to or posted
+        about.</li>
+        <li><strong>Reason presets</strong> — optional, one tap instead of typing
+        in the rain.</li>
+      </ul>
+      <p>The service arrives with its own admin group and a first crew already
+      made, so you can invite someone into it straight away.</p>
+
+      <h3>Inviting across services</h3>
+      <p>When you make an invite you also choose <em>where</em> it lands — which
+      service an admin joins, or which crew a poster joins. A service admin never
+      sees that choice, because they only have one answer.</p>
+
+      <h3>Areas</h3>
+      <p>You can add and rename areas in any service. The heading always names the
+      service you are editing; switch services at the top of <strong>Post a
+      notice</strong> and the whole console follows.</p>
+      <p>Short ids are unique across the whole of kuhu, not per service. If
+      electricity already has <code>naddi</code>, water's becomes something like
+      <code>naddi-tank</code>.</p>
+
+      <h3>Things worth not breaking</h3>
+      <ul>
+        <li>The <strong>last site admin cannot be removed</strong>, and nobody can
+        remove themselves. kuhu will refuse rather than let you lock everyone out.</li>
+        <li>A short id is permanent once anyone has subscribed to it.</li>
+        <li>Removing a person keeps their notices. Removing a service does not —
+        so only remove an empty one.</li>
+      </ul>
+
+      <h3>When the app looks stale</h3>
+      <p>The version sits at the bottom right of every screen. If the server is
+      ahead of your phone it turns into a button — tap it and the app clears its
+      cache and reloads.</p>
+    </div>
+
+    <div data-guide-lang="hi">
+      <h2>kuhu चलाना</h2>
+      <p>आप हर सेवा के ऊपर हैं। सेवा एडमिन जो कुछ कर सकते हैं, वह आप सभी सेवाओं में
+      कर सकते हैं — और एक काम सिर्फ़ आप कर सकते हैं: नई सेवा बनाना।</p>
+
+      <h3>kuhu की बनावट</h3>
+      <p>तीन स्तर, और हर स्तर को सिर्फ़ अपना हिस्सा दिखता है:</p>
+      <div class="tree demo">
+kuhu                        ← आप: हर सेवा
+  └── बिजली                  ← सेवा एडमिन: एक सेवा
+        └── लाइन टीम          ← सूचना डालने वाले: अपने इलाके</div>
+      <p>किसी का <em>काम</em> तय करता है कि वह क्या कर सकता है; वह कहाँ बैठा है यह
+      तय करता है कि उसे क्या दिखेगा। इसीलिए सेवा एडमिन को दूसरी सेवा नहीं दिखती —
+      छिपाई नहीं गई, वह बस उनके नीचे नहीं है।</p>
+
+      <h3>नई सेवा बनाना</h3>
+      <p><strong>एडमिन → सेवाएँ</strong> में। हर सेवा अपने शब्द लाती है, और वे आप
+      बनाते समय ही लिखते हैं:</p>
+      <ul>
+        <li><strong>सूचना के प्रकार</strong> — वह क्या बता सकती है। पानी कहेगा
+        <em>पानी नहीं आएगा</em>, <em>टैंकर आएगा</em>; बिजली कहती है <em>बिजली
+        कटौती</em>। दोनों भाषाओं में।</li>
+        <li><strong>इलाके</strong> — यह सेवा नक्शे को कैसे बाँटती है। कम से कम एक
+        दीजिए: बिना इलाके की सेवा में न कोई जुड़ सकता है, न सूचना जा सकती है।</li>
+        <li><strong>तैयार वजहें</strong> — ज़रूरी नहीं, पर बारिश में टाइप करने से
+        बेहतर।</li>
+      </ul>
+      <p>सेवा अपने एडमिन समूह और एक टीम के साथ बनती है, इसलिए तुरंत किसी को बुलाया
+      जा सकता है।</p>
+
+      <h3>सेवाओं के आर-पार बुलाना</h3>
+      <p>निमंत्रण बनाते समय आप यह भी चुनते हैं कि वह <em>कहाँ</em> जाएगा — कौन-सी
+      सेवा में एडमिन, या कौन-सी टीम में सूचना डालने वाला। सेवा एडमिन को यह विकल्प
+      दिखता ही नहीं, क्योंकि उनके पास एक ही जवाब है।</p>
+
+      <h3>इलाके</h3>
+      <p>आप किसी भी सेवा में इलाके जोड़ और उनके नाम बदल सकते हैं। शीर्षक में हमेशा
+      उस सेवा का नाम रहता है; <strong>सूचना डालें</strong> के ऊपर सेवा बदलिए और
+      पूरा कंसोल उसी के साथ बदल जाता है।</p>
+      <p>छोटी आईडी पूरे kuhu में अलग होती है, हर सेवा में अलग-अलग नहीं। बिजली के पास
+      <code>naddi</code> पहले से है तो पानी की <code>naddi-tank</code> जैसी बनेगी।</p>
+
+      <h3>जो न टूटे तो बेहतर</h3>
+      <ul>
+        <li><strong>आख़िरी साइट एडमिन नहीं हटाया जा सकता</strong>, और कोई ख़ुद को
+        नहीं हटा सकता। kuhu मना कर देगा, ताकि सब बाहर न रह जाएँ।</li>
+        <li>जिस छोटी आईडी से कोई जुड़ चुका है, वह हमेशा के लिए है।</li>
+        <li>व्यक्ति हटाने पर उनकी सूचनाएँ रहती हैं। सेवा हटाने पर नहीं — इसलिए
+        सिर्फ़ ख़ाली सेवा हटाइए।</li>
+      </ul>
+
+      <h3>ऐप पुराना लगे तो</h3>
+      <p>हर पन्ने के नीचे दाईं ओर वर्ज़न लिखा है। सर्वर आपके फ़ोन से आगे हो तो वह
+      एक बटन बन जाता है — दबाइए, ऐप अपना कैश साफ़ करके फिर से खुल जाता है।</p>
+    </div>
+  </article>
+
+  <div class="foot">
+    <a href="/post" data-s="post_link">Team login</a>
+    <a href="/" data-s="subscribe_link">Subscribe instead</a>
+  </div>
+
+  <div class="footlinks">
+    <a href="https://kuhu.starstucklab.com" target="_blank" rel="noopener" data-s="foot_site">About kuhu</a>
+    <a href="https://github.com/m-anish/kuhu" target="_blank" rel="noopener" data-s="foot_repo">Source on GitHub</a>
+    <span id="version" class="version"></span>
+  </div>
+
+</div>
+<script type="module" src="/help.js"></script>
+</body>
+</html>

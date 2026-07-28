@@ -670,3 +670,57 @@ a.way:hover { border-color: color-mix(in srgb, var(--sage) 55%, transparent); }
 .version.stale:focus-visible { outline: 2px solid var(--sage); outline-offset: 2px; }
 
 .hidden { display: none !important; }
+
+/* ---------- help guides ---------- */
+/* Both languages are authored side by side in the markup rather than in
+   i18n.js — long prose belongs next to the prose it translates, and a guide
+   that silently falls back to English is worse than no guide. */
+html[lang='en'] [data-guide-lang='hi'],
+html[lang='hi'] [data-guide-lang='en'] { display: none; }
+
+.lede { color: var(--dim); margin-top: -0.4rem; margin-bottom: 1.4rem; }
+
+.guide h2 {
+  font-size: 1.25rem;
+  margin: 2rem 0 0.6rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.guide h3 {
+  font-size: 1rem;
+  margin: 1.5rem 0 0.4rem;
+  color: var(--sage);
+}
+
+.guide p, #help-anon p { line-height: 1.62; margin: 0.5rem 0; }
+.guide ul { margin: 0.5rem 0; padding-left: 1.1rem; line-height: 1.62; }
+.guide li { margin: 0.35rem 0; }
+.guide code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  background: var(--raised);
+  border-radius: 4px;
+  padding: 0.1rem 0.3rem;
+}
+
+/* Fragments lifted from the app so the guide looks like the thing it
+   describes. Inert on purpose — they illustrate, they do not work. */
+.demo {
+  margin: 0.7rem 0 1.1rem;
+  opacity: 0.92;
+  pointer-events: none;
+}
+
+.tree {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  line-height: 1.7;
+  white-space: pre;
+  overflow-x: auto;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.8rem 0.9rem;
+  color: var(--dim);
+}

@@ -207,9 +207,13 @@ h2 {
 p.lede { color: var(--dim); margin: 0 0 1.6rem; }
 
 /* ---------- form controls: thumb-sized, always ---------- */
-label.field { display: block; margin-bottom: 1.1rem; }
+/* Deliberately not `label.field`: a group of chip *buttons* must never be
+   wrapped in a <label>, because a label forwards its click to the first
+   labelable control inside it — which silently re-selects the first chip on
+   every tap. Those groups use <div class="field"> and style the same. */
+.field { display: block; margin-bottom: 1.1rem; }
 
-label.field > span {
+.field > span {
   display: block;
   font-size: 0.85rem;
   color: var(--dim);

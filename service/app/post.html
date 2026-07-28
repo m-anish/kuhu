@@ -125,20 +125,22 @@
           <div id="members"></div>
 
           <h4 data-s="invite_someone">Invite someone</h4>
-          <label class="field">
-            <span data-s="invite_as">Joining as</span>
-            <div id="invite-role" class="chips"></div>
-          </label>
+          <!-- These three are <div>, not <label>: see the note on .field in
+               app.css. A <label> wrapping chip buttons re-clicks the first one. -->
+          <div class="field">
+            <span id="invite-as-label" data-s="invite_as">Joining as</span>
+            <div id="invite-role" class="chips" role="group" aria-labelledby="invite-as-label"></div>
+          </div>
           <!-- Where the invitee lands. Hidden when there is only one place
                they could go, which is the usual case. -->
-          <label class="field hidden" id="invite-target-row">
+          <div class="field hidden" id="invite-target-row">
             <span id="invite-target-label" data-s="invite_where">Into which</span>
-            <div id="invite-target" class="chips"></div>
-          </label>
-          <label class="field">
-            <span data-s="invite_valid">Link works for</span>
-            <div id="invite-hours" class="chips"></div>
-          </label>
+            <div id="invite-target" class="chips" role="group" aria-labelledby="invite-target-label"></div>
+          </div>
+          <div class="field">
+            <span id="invite-valid-label" data-s="invite_valid">Link works for</span>
+            <div id="invite-hours" class="chips" role="group" aria-labelledby="invite-valid-label"></div>
+          </div>
           <label class="field">
             <span data-s="invite_note">Note to yourself (optional)</span>
             <input id="invite-note" placeholder="">

@@ -1,20 +1,27 @@
-// The posting face. Invite code once, then: area, kind, window, reason, send.
+// The posting face. Pick areas, say what and when, send.
 // Designed for one thumb, in the rain, in under a minute.
+//
+// A poster usually reaches exactly one service, and then the service layer is
+// invisible. Someone who reaches several — a service admin, a site admin —
+// gets a service switcher, and the kinds and reason presets change with it,
+// because those belong to the service rather than to this file.
 
-import { STRINGS, REASONS, pickLang, setLang, fmtWindow, localToIso, isoToLocalInput, parseInviteToken, initTheme } from '/i18n.js';
+import { STRINGS, pickLang, setLang, fmtWindow, localToIso, isoToLocalInput, parseInviteToken, initTheme } from '/i18n.js';
 
 let lang = pickLang();
 let token = localStorage.getItem('kuhu.token') || '';
 let team = localStorage.getItem('kuhu.team') || '';
-let role = localStorage.getItem('kuhu.role') || 'poster';
-let areas = [];
-let sel = { regions: new Set(), kind: 'cut', reason: null };
+let me = null;                       // { name, role, team, services[], can{} }
+let svc = null;                      // the service currently being posted to
+let sel = { regions: new Set(), kind: null, reason: null };
 let inviteSel = { role: 'poster', hours: 48 };
 let lastInviteUrl = '';
+let moveUrl = '';
 
 const $ = (s) => document.querySelector(s);
 const flash = $('#flash');
 const t = (k) => STRINGS[lang][k];
+const name = (o) => (lang === 'hi' ? o.name_hi : o.name_en);
 
 function say(msg, kind = 'ok') {
   flash.textContent = msg;
@@ -28,7 +35,7 @@ function paintStrings() {
   for (const b of document.querySelectorAll('.lang button')) {
     b.setAttribute('aria-pressed', String(b.dataset.lang === lang));
   }
-  $('#who').textContent = team ? `${t('joined_as')} ${team}` : '';
+  $('#who').textContent = me ? `${me.name} · ${me.team}` : (team || '');
 }
 
 function escapeHtml(s) {
@@ -51,17 +58,13 @@ async function api(path, options = {}) {
 // ---------- session ----------
 
 function signOut() {
-  localStorage.removeItem('kuhu.token');
-  localStorage.removeItem('kuhu.team');
-  localStorage.removeItem('kuhu.role');
-  token = ''; team = ''; role = 'poster';
+  for (const k of ['kuhu.token', 'kuhu.team', 'kuhu.role']) localStorage.removeItem(k);
+  token = ''; team = ''; me = null; svc = null;
   $('#post-view').classList.add('hidden');
   $('#admin-view').classList.add('hidden');
   $('#join-view').classList.remove('hidden');
   paintStrings();
 }
-
-// ---------- post view ----------
 
 async function showPostView() {
   $('#join-view').classList.add('hidden');
@@ -69,39 +72,64 @@ async function showPostView() {
 
   const res = await api('/api/me');
   if (!res.ok) return signOut();
-  const me = await res.json();
-  areas = me.regions || [];
-  role = me.role;
-  team = team || '';
-  localStorage.setItem('kuhu.role', role);
+  me = await res.json();
+  team = me.team;
+  localStorage.setItem('kuhu.team', team);
+  localStorage.setItem('kuhu.role', me.role);
+
+  svc = me.services[0] || null;
+  if (!svc) { say(t('no_service'), 'bad'); return; }
+  sel.kind = svc.kinds[0]?.key ?? null;
 
   paintStrings();
+  paintServices();
   paintAreas();
   paintKinds();
   paintQuick();
   paintReasons();
   defaultWindow();
   loadMine();
-
-  $('#admin-view').classList.toggle('hidden', role !== 'admin');
-  if (role === 'admin') {
-    paintInviteControls();
-    loadInvites();
-    loadMembers();
-    paintAreasAdmin();
-  }
+  paintAdmin();
 }
 
-/** Areas are multi-select: one outage often crosses several of them. */
-function paintAreas() {
-  const box = $('#areas');
+/** Only shown when this person reaches more than one service. */
+function paintServices() {
+  const wrap = $('#service-row');
+  const box = $('#services');
+  const many = me.services.length > 1;
+  wrap.classList.toggle('hidden', !many);
+  if (!many) return;
   box.textContent = '';
-  if (areas.length === 1) sel.regions.add(areas[0].slug);
-  for (const a of areas) {
+  for (const s of me.services) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'chip';
-    b.textContent = lang === 'hi' ? a.name_hi : a.name_en;
+    b.textContent = `${s.icon || ''} ${name(s)}`.trim();
+    b.setAttribute('aria-pressed', String(s.slug === svc.slug));
+    b.addEventListener('click', () => {
+      if (s.slug === svc.slug) return;
+      svc = s;
+      // The vocabulary belongs to the service, so everything below resets.
+      sel.regions.clear();
+      sel.kind = svc.kinds[0]?.key ?? null;
+      sel.reason = null;
+      $('#reason-free').value = '';
+      paintServices(); paintAreas(); paintKinds(); paintReasons();
+      if (me.can?.manage_areas) loadAllAreas();
+    });
+    box.append(b);
+  }
+}
+
+function paintAreas() {
+  const box = $('#areas');
+  box.textContent = '';
+  if (svc.regions.length === 1) sel.regions.add(svc.regions[0].slug);
+  for (const a of svc.regions) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.textContent = name(a);
     b.setAttribute('aria-pressed', String(sel.regions.has(a.slug)));
     b.addEventListener('click', () => {
       sel.regions.has(a.slug) ? sel.regions.delete(a.slug) : sel.regions.add(a.slug);
@@ -111,16 +139,17 @@ function paintAreas() {
   }
 }
 
+/** Kinds come from the service: "power cut" for one, "tanker coming" for another. */
 function paintKinds() {
   const box = $('#kinds');
   box.textContent = '';
-  for (const k of ['cut', 'advisory', 'restored']) {
+  for (const k of svc.kinds) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'chip';
-    b.textContent = t(`kind_${k}`);
-    b.setAttribute('aria-pressed', String(sel.kind === k));
-    b.addEventListener('click', () => { sel.kind = k; paintKinds(); });
+    b.textContent = name(k);
+    b.setAttribute('aria-pressed', String(sel.kind === k.key));
+    b.addEventListener('click', () => { sel.kind = k.key; paintKinds(); });
     box.append(b);
   }
 }
@@ -129,15 +158,15 @@ function paintQuick() {
   const box = $('#quick');
   box.textContent = '';
   const presets = [
-    ['in_2h',       () => { const a = new Date(); const b = new Date(a.getTime() + 2 * 3600e3); return [a, b]; }],
+    ['in_2h',       () => { const a = new Date(); return [a, new Date(a.getTime() + 2 * 3600e3)]; }],
     ['tonight',     () => atHour(0, 18, 21)],
     ['tomorrow_am', () => atHour(1, 9, 12)],
   ];
-  for (const [key, mk] of presets) {
+  for (const [k, mk] of presets) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'chip';
-    b.textContent = t(key);
+    b.textContent = t(k);
     b.addEventListener('click', () => {
       const [from, to] = mk();
       $('#from').value = isoToLocalInput(from);
@@ -157,20 +186,20 @@ function atHour(dayOffset, startHour, endHour) {
 }
 
 function defaultWindow() {
-  const from = new Date(Math.ceil(Date.now() / (30 * 60e3)) * 30 * 60e3);   // next half hour
-  const to = new Date(from.getTime() + 2 * 3600e3);
+  const from = new Date(Math.ceil(Date.now() / (30 * 60e3)) * 30 * 60e3);
   $('#from').value = isoToLocalInput(from);
-  $('#to').value = isoToLocalInput(to);
+  $('#to').value = isoToLocalInput(new Date(from.getTime() + 2 * 3600e3));
 }
 
+/** Reason presets also belong to the service. */
 function paintReasons() {
   const box = $('#reasons');
   box.textContent = '';
-  REASONS.forEach((r, i) => {
+  svc.reasons.forEach((r, i) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'chip';
-    b.textContent = lang === 'hi' ? r.hi : r.en;
+    b.textContent = name(r);
     b.setAttribute('aria-pressed', String(sel.reason === i));
     b.addEventListener('click', () => {
       sel.reason = sel.reason === i ? null : i;
@@ -185,7 +214,7 @@ function paintReasons() {
 
 async function publish() {
   const free = $('#reason-free').value.trim();
-  const preset = sel.reason !== null ? REASONS[sel.reason] : null;
+  const preset = sel.reason !== null ? svc.reasons[sel.reason] : null;
   if (sel.regions.size === 0) return say(t('pick_one'), 'bad');
   if (!preset && !free) return say(t('need_reason'), 'bad');
   const from = localToIso($('#from').value);
@@ -195,22 +224,20 @@ async function publish() {
   // A preset carries both languages. Free text is only what was actually typed —
   // kuhu does not invent a translation it cannot vouch for.
   const body = {
+    service: svc.slug,
     regions: [...sel.regions],
     kind: sel.kind,
     from,
     to,
-    reason_en: preset ? preset.en : (lang === 'en' ? free : ''),
-    reason_hi: preset ? preset.hi : (lang === 'hi' ? free : ''),
+    reason_en: preset ? preset.name_en : (lang === 'en' ? free : ''),
+    reason_hi: preset ? preset.name_hi : (lang === 'hi' ? free : ''),
   };
 
   const btn = $('#publish');
   btn.disabled = true;
   try {
     const res = await api('/api/notices', { method: 'POST', body: JSON.stringify(body) });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      return say(err.error || 'error', 'bad');
-    }
+    if (!res.ok) return say((await res.json().catch(() => ({}))).error || 'error', 'bad');
     const out = await res.json();
     say(out.areas > 1 ? t('published_many').replace('{n}', out.areas) : t('published'), 'ok');
     $('#reason-free').value = '';
@@ -229,31 +256,29 @@ async function loadMine() {
   if (!res.ok) return;
   const { notices } = await res.json();
   box.textContent = '';
-  if (!notices || notices.length === 0) {
-    box.innerHTML = `<p class="empty">${t('none_upcoming')}</p>`;
-    return;
-  }
+  if (!notices?.length) { box.innerHTML = `<p class="empty">${escapeHtml(t('none_upcoming'))}</p>`; return; }
 
-  // Rows posted together are shown together — one card listing its areas,
-  // because that is what the lineman actually did.
   const groups = [];
   const byBatch = new Map();
   for (const n of notices) {
-    const key = n.batch_id || n.id;
-    if (!byBatch.has(key)) { const g = { head: n, items: [] }; byBatch.set(key, g); groups.push(g); }
-    byBatch.get(key).items.push(n);
+    const k = n.batch_id || n.id;
+    if (!byBatch.has(k)) { const g = { head: n, items: [] }; byBatch.set(k, g); groups.push(g); }
+    byBatch.get(k).items.push(n);
   }
 
   for (const g of groups) {
     const n = g.head;
     const el = document.createElement('div');
     el.className = `notice${n.status === 'cancelled' ? ' cancelled' : ''}`;
-    const names = g.items.map((i) => (lang === 'hi' ? i.region.name_hi : i.region.name_en)).join(' · ');
+    const areas = g.items.map((i) => name(i.area)).join(' · ');
     const why = (lang === 'hi' ? n.reason.hi : n.reason.en) || n.reason.en || n.reason.hi || '';
+    const svcOf = me.services.find((s) => s.slug === n.service.slug);
+    const kindTxt = svcOf?.kinds.find((k) => k.key === n.kind);
+    const label = n.status === 'cancelled' ? t('cancelled_label') : (kindTxt ? name(kindTxt) : n.kind);
     el.innerHTML = `
       <div class="meta">
-        <span>${escapeHtml(names)}</span>
-        <span class="kind">${escapeHtml(n.status === 'cancelled' ? t('cancelled_label') : t(`kind_${n.kind}`))}</span>
+        <span>${escapeHtml(areas)}</span>
+        <span class="kind">${escapeHtml((n.service.icon ? n.service.icon + ' ' : '') + label)}</span>
       </div>
       <div class="when">${escapeHtml(fmtWindow(n.from, n.to, lang))}</div>
       ${why ? `<div class="why">${escapeHtml(why)}</div>` : ''}`;
@@ -272,16 +297,34 @@ async function loadMine() {
   }
 }
 
-// ---------- admin: invites ----------
+// ---------- admin ----------
+
+function paintAdmin() {
+  const can = me.can || {};
+  $('#admin-view').classList.toggle('hidden', !can.manage_people);
+  $('#acc-areas').classList.toggle('hidden', !can.manage_coverage);
+  $('#geography').classList.toggle('hidden', !can.manage_areas);
+  if (!can.manage_people) return;
+  paintInviteControls();
+  loadInvites();
+  loadMembers();
+  paintCoverage();
+  if (can.manage_areas) loadAllAreas();
+}
 
 function paintInviteControls() {
   const roleBox = $('#invite-role');
   roleBox.textContent = '';
-  for (const r of ['poster', 'admin']) {
+  // You may only hand out authority at or below your own.
+  const offer = me.role === 'site_admin'
+    ? ['poster', 'service_admin', 'site_admin']
+    : ['poster', 'service_admin'];
+  if (!offer.includes(inviteSel.role)) inviteSel.role = 'poster';
+  for (const r of offer) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'chip';
-    b.textContent = t(r === 'admin' ? 'role_admin' : 'role_poster');
+    b.textContent = t(`role_${r}`);
     b.setAttribute('aria-pressed', String(inviteSel.role === r));
     b.addEventListener('click', () => { inviteSel.role = r; paintInviteControls(); });
     roleBox.append(b);
@@ -326,22 +369,15 @@ function waMessage() {
 
 async function shareInvite() {
   if (!lastInviteUrl) return;
-  // The Web Share API gives the real WhatsApp share sheet on a phone; wa.me is
-  // the desktop-and-everything-else fallback.
   if (navigator.share) {
     try { await navigator.share({ text: waMessage() }); return; } catch { /* cancelled */ }
   }
   window.open(`https://wa.me/?text=${encodeURIComponent(waMessage())}`, '_blank', 'noopener');
 }
 
-async function copyInvite() {
-  if (!lastInviteUrl) return;
-  try {
-    await navigator.clipboard.writeText(lastInviteUrl);
-    say(t('copied'), 'ok');
-  } catch {
-    say(lastInviteUrl, 'ok');
-  }
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); say(t('copied'), 'ok'); }
+  catch { say(text, 'ok'); }
 }
 
 async function loadInvites() {
@@ -351,15 +387,15 @@ async function loadInvites() {
   const { invites } = await res.json();
   box.textContent = '';
   const live = invites.filter((i) => i.state !== 'expired');
-  if (live.length === 0) { box.innerHTML = `<p class="empty">${escapeHtml(t('no_invites'))}</p>`; return; }
+  if (!live.length) { box.innerHTML = `<p class="empty">${escapeHtml(t('no_invites'))}</p>`; return; }
   for (const i of live) {
     const el = document.createElement('div');
     el.className = 'row';
     const who = i.state === 'used' && i.used_by_name ? ` · ${i.used_by_name}` : '';
     el.innerHTML = `
       <div>
-        <strong>${escapeHtml(i.note || t(i.role === 'admin' ? 'role_admin' : 'role_poster'))}</strong>
-        <div class="sub">${escapeHtml(t(`state_${i.state}`))}${escapeHtml(who)}</div>
+        <strong>${escapeHtml(i.note || t(`role_${i.role}`))}</strong>
+        <div class="sub">${escapeHtml(t(`state_${i.state}`) + who)}</div>
       </div>`;
     if (i.state === 'open') {
       const btn = document.createElement('button');
@@ -377,29 +413,25 @@ async function loadInvites() {
   }
 }
 
-// ---------- admin: members ----------
-
 async function loadMembers() {
   const box = $('#members');
   const res = await api('/api/team/members');
   if (!res.ok) return;
   const { members } = await res.json();
-  // Summary count, so an admin knows what's inside without opening it.
-  const active = members.filter((m) => !m.revoked_at).length;
-  $('#count-people').textContent = String(active);
+  $('#count-people').textContent = String(members.filter((m) => !m.revoked_at).length);
   box.textContent = '';
   for (const m of members) {
     const el = document.createElement('div');
     el.className = `row${m.revoked_at ? ' dim' : ''}`;
-    const bits = [t(m.role === 'admin' ? 'role_admin' : 'role_poster')];
+    const bits = [t(`role_${m.role}`), m.team_name];
     if (m.phone) bits.push(m.phone);
     if (m.revoked_at) bits.push(t('state_revoked'));
     el.innerHTML = `
       <div>
         <strong>${escapeHtml(m.name)}${m.is_you ? ' ·' : ''}</strong>
-        <div class="sub">${escapeHtml(bits.join(' · '))}</div>
+        <div class="sub">${escapeHtml(bits.filter(Boolean).join(' · '))}</div>
       </div>`;
-    if (!m.revoked_at && !m.is_you) {
+    if (m.can_remove) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'mini';
@@ -410,7 +442,7 @@ async function loadMembers() {
         if (r.ok) { say(t('removed_ok'), 'ok'); loadMembers(); }
         else {
           const err = await r.json().catch(() => ({}));
-          say(err.error === 'that is the last admin' ? t('last_admin') : (err.error || 'error'), 'bad');
+          say(err.error?.includes('last site admin') ? t('last_admin') : (err.error || 'error'), 'bad');
           btn.disabled = false;
         }
       });
@@ -420,20 +452,55 @@ async function loadMembers() {
   }
 }
 
-// ---------- admin: areas ----------
-
-function paintAreasAdmin() {
-  const box = $('#areas-admin');
-  $('#count-areas').textContent = String(areas.length);
+/** Which areas this admin's own crew covers, for the service being viewed. */
+function paintCoverage() {
+  const box = $('#coverage');
   box.textContent = '';
-  for (const a of areas) {
+  $('#count-areas').textContent = String(svc?.regions.length ?? 0);
+  const covered = new Set((svc?.regions ?? []).map((r) => r.slug));
+  for (const a of allAreas.length ? allAreas : (svc?.regions ?? [])) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.textContent = name(a);
+    b.setAttribute('aria-pressed', String(covered.has(a.slug)));
+    b.addEventListener('click', async () => {
+      const on = !covered.has(a.slug);
+      b.disabled = true;
+      const r = await api(`/api/services/${svc.slug}/coverage`, {
+        method: 'POST', body: JSON.stringify({ area: a.slug, on }),
+      });
+      b.disabled = false;
+      if (!r.ok) return say((await r.json().catch(() => ({}))).error || 'error', 'bad');
+      const res = await api('/api/me');
+      me = await res.json();
+      svc = me.services.find((s) => s.slug === svc.slug) || me.services[0];
+      sel.regions.clear();
+      paintAreas(); paintCoverage();
+    });
+    box.append(b);
+  }
+}
+
+let allAreas = [];
+
+/** Every area THIS service defines — a superset of what one crew covers. */
+async function loadAllAreas() {
+  if (!svc) return;
+  const res = await api(`/api/services/${svc.slug}/areas`);
+  if (!res.ok) return;
+  allAreas = (await res.json()).areas || [];
+  paintCoverage();
+  paintGeography();
+}
+
+function paintGeography() {
+  const box = $('#areas-all');
+  box.textContent = '';
+  for (const a of allAreas) {
     const el = document.createElement('div');
     el.className = 'row';
-    el.innerHTML = `
-      <div>
-        <strong>${escapeHtml(lang === 'hi' ? a.name_hi : a.name_en)}</strong>
-        <div class="sub"><code>${escapeHtml(a.slug)}</code></div>
-      </div>`;
+    el.innerHTML = `<div><strong>${escapeHtml(name(a))}</strong><div class="sub"><code>${escapeHtml(a.slug)}</code></div></div>`;
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'mini';
@@ -449,10 +516,8 @@ function renameArea(area, row) {
   const form = document.createElement('div');
   form.className = 'rename-form';
   form.innerHTML = `
-    <label class="field"><span>${escapeHtml(t('area_en'))}</span>
-      <input class="r-en" value="${escapeHtml(area.name_en)}"></label>
-    <label class="field"><span>${escapeHtml(t('area_hi'))}</span>
-      <input class="r-hi" value="${escapeHtml(area.name_hi)}"></label>
+    <label class="field"><span>${escapeHtml(t('area_en'))}</span><input class="r-en" value="${escapeHtml(area.name_en)}"></label>
+    <label class="field"><span>${escapeHtml(t('area_hi'))}</span><input class="r-hi" value="${escapeHtml(area.name_hi)}"></label>
     <small class="hint">${escapeHtml(t('slug_fixed'))}</small>`;
   const save = document.createElement('button');
   save.type = 'button';
@@ -461,7 +526,7 @@ function renameArea(area, row) {
   save.textContent = t('rename');
   save.addEventListener('click', async () => {
     save.disabled = true;
-    const res = await api(`/api/regions/${area.slug}/rename`, {
+    const res = await api(`/api/services/${svc.slug}/areas/${area.slug}/rename`, {
       method: 'POST',
       body: JSON.stringify({
         name_en: form.querySelector('.r-en').value.trim(),
@@ -469,21 +534,22 @@ function renameArea(area, row) {
       }),
     });
     if (!res.ok) { say((await res.json().catch(() => ({}))).error || 'error', 'bad'); save.disabled = false; return; }
-    const updated = await res.json();
-    Object.assign(area, updated);
+    Object.assign(area, await res.json());
     say(t('rename_saved'), 'ok');
+    loadAllAreas();
+    const fresh = await api('/api/me');
+    me = await fresh.json();
+    svc = me.services.find((s) => s.slug === svc.slug) || me.services[0];
     paintAreas();
-    paintAreasAdmin();
   });
   form.append(save);
   row.append(form);
 }
 
-/** Suggest a slug from the English name, but let the admin overrule it. */
 function suggestSlug() {
-  const slugField = $('#new-slug');
-  if (slugField.dataset.touched === '1') return;
-  slugField.value = $('#new-en').value.trim().toLowerCase()
+  const f = $('#new-slug');
+  if (f.dataset.touched === '1') return;
+  f.value = $('#new-en').value.trim().toLowerCase()
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 39);
 }
 
@@ -491,7 +557,7 @@ async function addArea() {
   const btn = $('#add-area');
   btn.disabled = true;
   try {
-    const res = await api('/api/regions', {
+    const res = await api(`/api/services/${svc.slug}/areas`, {
       method: 'POST',
       body: JSON.stringify({
         slug: $('#new-slug').value.trim().toLowerCase(),
@@ -500,22 +566,16 @@ async function addArea() {
       }),
     });
     if (!res.ok) return say((await res.json().catch(() => ({}))).error || 'error', 'bad');
-    const added = await res.json();
-    areas.push(added);
-    areas.sort((a, b) => a.slug.localeCompare(b.slug));
     $('#new-en').value = ''; $('#new-hi').value = ''; $('#new-slug').value = '';
     $('#new-slug').dataset.touched = '';
     say(t('area_added'), 'ok');
-    paintAreas();
-    paintAreasAdmin();
+    loadAllAreas();
   } finally {
     btn.disabled = false;
   }
 }
 
-// ---------- moving to a new phone ----------
-
-let moveUrl = '';
+// ---------- moving to another phone ----------
 
 async function makeMove() {
   const btn = $('#move');
@@ -539,12 +599,6 @@ async function shareMove() {
   window.open(`https://wa.me/?text=${encodeURIComponent(moveUrl)}`, '_blank', 'noopener');
 }
 
-async function copyMove() {
-  if (!moveUrl) return;
-  try { await navigator.clipboard.writeText(moveUrl); say(t('copied'), 'ok'); }
-  catch { say(moveUrl, 'ok'); }
-}
-
 // ---------- wiring ----------
 
 for (const b of document.querySelectorAll('.lang button')) {
@@ -552,35 +606,32 @@ for (const b of document.querySelectorAll('.lang button')) {
     lang = b.dataset.lang;
     paintStrings();
     theme?.repaint();
-    if (token) {
-      paintAreas(); paintKinds(); paintQuick(); paintReasons(); loadMine();
-      if (role === 'admin') { paintInviteControls(); loadInvites(); loadMembers(); paintAreasAdmin(); }
+    if (me) {
+      paintServices(); paintAreas(); paintKinds(); paintQuick(); paintReasons(); loadMine();
+      paintAdmin();
     }
   });
 }
 
-$('#publish').addEventListener('click', publish);
-$('#signout').addEventListener('click', signOut);
-$('#make-invite').addEventListener('click', makeInvite);
-$('#share-wa').addEventListener('click', shareInvite);
-$('#copy-link').addEventListener('click', copyInvite);
-$('#add-area').addEventListener('click', addArea);
-$('#new-en').addEventListener('input', suggestSlug);
-$('#new-slug').addEventListener('input', (e) => { e.target.dataset.touched = '1'; });
 $('#paste-go').addEventListener('click', () => {
   const found = parseInviteToken($('#paste').value);
   if (!found) return say(t('paste_bad'), 'bad');
   location.href = `/join#t=${found}`;
 });
 $('#paste').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#paste-go').click(); });
+$('#publish').addEventListener('click', publish);
+$('#signout').addEventListener('click', signOut);
+$('#make-invite').addEventListener('click', makeInvite);
+$('#share-wa').addEventListener('click', shareInvite);
+$('#copy-link').addEventListener('click', () => copyText(lastInviteUrl));
+$('#add-area').addEventListener('click', addArea);
+$('#new-en').addEventListener('input', suggestSlug);
+$('#new-slug').addEventListener('input', (e) => { e.target.dataset.touched = '1'; });
 $('#move').addEventListener('click', makeMove);
 $('#move-share').addEventListener('click', shareMove);
-$('#move-copy').addEventListener('click', copyMove);
+$('#move-copy').addEventListener('click', () => copyText(moveUrl));
 
 const theme = initTheme(t);
 paintStrings();
-if (token) {
-  showPostView().catch(signOut);
-} else {
-  $('#join-view').classList.remove('hidden');
-}
+if (token) showPostView().catch(signOut);
+else $('#join-view').classList.remove('hidden');

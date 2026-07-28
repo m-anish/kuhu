@@ -48,7 +48,7 @@ function paintInvite() {
     $('#join').textContent = t('move_confirm');
     return;
   }
-  const role = invite.role === 'admin' ? t('role_admin') : t('role_poster');
+  const role = t(`role_${invite.role}`) || t('role_poster');
   $('#invite-head').textContent = t('join_as').replace('{team}', invite.team).replace('{role}', role);
   $('#invite-lede').textContent = t('join_lede2');
   $('#new-fields').classList.remove('hidden');

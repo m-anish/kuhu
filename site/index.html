@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>kuhu — a soft call before the power turns</title>
-  <meta name="description" content="Power-cut notices from the people who actually run your local grid — posted in English or हिंदी, delivered as one quiet notification, offered to gadgets over JSON and MQTT. A starstucklab project." />
+  <title>kuhu — a soft call before things go off</title>
+  <meta name="description" content="Community notices from the people who actually keep things running — power cuts today, water and whatever else a neighbourhood needs warning about next. Posted in English or हिंदी, delivered as one quiet notification, offered to gadgets over JSON and MQTT. A starstucklab project." />
   <meta property="og:title" content="kuhu" />
-  <meta property="og:description" content="A soft call before the power turns. Notices from the local electrical team, heard like a koel — quietly, and in time. A starstucklab project." />
+  <meta property="og:description" content="A soft call before things go off. Community notices from the people who keep them running, heard like a koel — quietly, and in time. A starstucklab project." />
   <meta property="og:image" content="https://kuhu.starstucklab.com/assets/og.png" />
   <meta property="og:type" content="website" />
   <meta name="theme-color" content="#0c0f0c" />
@@ -31,7 +31,7 @@
     <span class="beta">beta</span>
     <span class="status">
       <span class="dot"></span>
-      <span class="status-text">Season 1 · First call</span>
+      <span class="status-text">Season 2 · A second word</span>
     </span>
   </div>
 </header>
@@ -44,13 +44,15 @@
     <span class="sl-kicker">A starstucklab notice service</span>
     <h1>kuhu<span class="call" aria-hidden="true"><i></i><i></i></span></h1>
     <p class="beta-note">Beta — running in the hills above Dharamshala, and not yet tested by a monsoon.</p>
-    <p class="tagline">A soft call before the power turns.</p>
+    <p class="tagline">A soft call before things go off.</p>
     <p class="lede">
       The koel is heard, never seen. It calls twice from somewhere in the
       leaves, and everyone below quietly adjusts their afternoon. kuhu does the
-      same for power cuts: the people who actually operate the local grid post
-      a notice from their phones, and the households that listen for it hear —
-      once, softly, in time to do something about it.
+      same for the things a neighbourhood needs warning about: the people who
+      actually keep them running post a notice from their phones, and the
+      households listening for it hear — once, softly, in time to do something
+      about it. Electricity is the first of those things. It will not be the
+      last.
     </p>
   </div>
 </section>
@@ -61,8 +63,8 @@
     <span class="sl-kicker">A notice, entire</span>
     <div class="notice-card" role="img" aria-label="Sample notice: Ward 3, tomorrow 4 to 6 pm, line maintenance">
       <div class="notice-head">
-        <span class="notice-region">Ward 3 · वार्ड ३</span>
-        <span class="notice-kind">power cut · बिजली कटौती</span>
+        <span class="notice-region">Naddi · नड्डी</span>
+        <span class="notice-kind">⚡ power cut · बिजली कटौती</span>
       </div>
       <p class="notice-window">Tomorrow, 16:00 – 18:00</p>
       <p class="notice-window-hi">कल, शाम 4 – 6 बजे</p>
@@ -71,7 +73,8 @@
     </div>
     <p class="notice-note">
       That is the whole product. Everything else exists so this can arrive
-      before the cut does, and then stop talking.
+      before the thing does, and then stop talking. A water notice is the same
+      card with a different word on it.
     </p>
   </div>
 </section>
@@ -83,20 +86,21 @@
     <h2>One call, three kinds of listener.</h2>
     <div class="aud-grid">
       <div class="aud-card">
-        <h3>The team posts</h3>
+        <h3>The crew posts</h3>
         <p>
-          An electrician and their crew, on their phones, in English or हिंदी
-          as each prefers. Region, window, reason — under a minute, with rain
-          on the screen. No dashboard to learn. Nothing on the interface that
-          doesn't need to be there.
+          An electrician, a water operator, whoever keeps that thing working —
+          on their phones, in English or हिंदी as each prefers. Area, window,
+          reason: under a minute, with rain on the screen. Each crew sees only
+          its own service, so nobody scrolls past somebody else's job.
         </p>
       </div>
       <div class="aud-card">
         <h3>Households listen</h3>
         <p>
-          Pick your region. Get one quiet notification before a cut, and
-          nothing else, ever. The notification budget is sacred — kuhu would
-          rather be missed than muted.
+          Pick what you want warning about — this area's power, that area's
+          water. One quiet notification before it happens, and nothing else,
+          ever. The notification budget is sacred: kuhu would rather be missed
+          than muted.
         </p>
       </div>
       <div class="aud-card">
@@ -115,12 +119,13 @@
 <section class="shape">
   <div class="sl-wrap">
     <span class="sl-kicker">The shape of it</span>
-    <h2>Small now, correct later.</h2>
+    <h2>One service today. Room for the next.</h2>
     <ul class="shape-list">
-      <li><strong>Regions come first.</strong> A notice is published to a region — a ward, a feeder, a village — not to the world. A subscription is just a set of regions.</li>
-      <li><strong>Teams can nest.</strong> One crew and one region to begin with, but the schema already knows about district offices above area teams above linemen. Growing won't mean migrating.</li>
-      <li><strong>Delivery is web push,</strong> through an installable web app — free, quiet, no app store between a lineman and the publish button. A Telegram mirror comes nearly free; WhatsApp can come later, where the reach is.</li>
-      <li><strong>The API is boring on purpose.</strong> <code>GET /api/regions/{id}/next-cuts</code> — cacheable JSON for anything that polls; retained MQTT on <code>kuhu/&lt;region&gt;/cuts</code> for anything that listens.</li>
+      <li><strong>A service is a row, not a fork.</strong> Electricity is the first. Water, or anything else, is a new row carrying its own words — "no supply", "tanker coming" — without a line of code being written or deployed.</li>
+      <li><strong>Geography is shared.</strong> Naddi is Naddi whether the notice is about power or water. Each crew declares which areas it answers for; the map underneath belongs to everyone.</li>
+      <li><strong>Authority nests.</strong> A site admin above service admins above crews, each seeing only their own part of it. It is one tree, so the same question — what may this person touch? — has one answer.</li>
+      <li><strong>Complexity stays hidden.</strong> With one service, nobody is ever shown the word "service". A lineman gets areas, a window and a reason; that is all there is on his screen.</li>
+      <li><strong>The API is boring on purpose.</strong> <code>GET /api/services/{service}/areas/{area}/notices</code> — cacheable JSON for anything that polls; retained MQTT on <code>kuhu/&lt;service&gt;/&lt;area&gt;/notices</code> for anything that listens.</li>
     </ul>
   </div>
 </section>
@@ -142,15 +147,17 @@
 <section class="season">
   <div class="sl-wrap">
     <span class="sl-kicker">Status</span>
-    <h2>Season 1 · First call.</h2>
+    <h2>Season 2 · Learning a second word.</h2>
     <p>
       It works. You can
       <a class="sl-link" href="https://kuhuapp.starstucklab.com">open&nbsp;it&nbsp;↗</a>,
       pick an area, and be told when the power intends to leave; a crew with an
-      invite link posts the notice that tells you. What it does not have yet is
-      a real crew, or the MQTT branch the gadgets will listen on. So far one
-      notice has been posted, by its author, to a ward that does not exist. It
-      went through. The whole thing is public, in the
+      invite link posts the notice that tells you, and it arrives by
+      notification, by Telegram and over MQTT at the same time. kuhu now knows
+      how to hold more than one kind of notice — a second service has been
+      stood up in testing and taken down again, which is the only honest way to
+      claim it. What it still does not have is a real crew. The whole thing is
+      public, in the
       <a class="sl-link" href="https://github.com/m-anish/kuhu">repository&nbsp;↗</a>.
     </p>
   </div>

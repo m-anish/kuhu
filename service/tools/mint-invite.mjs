@@ -1,6 +1,7 @@
 // Mint an invite link from the command line.
 //
-//   node tools/mint-invite.mjs --admin                 # remote, admin, 48h
+//   node tools/mint-invite.mjs --site-admin            # remote, site admin, 48h
+//   node tools/mint-invite.mjs --service-admin --team 901
 //   node tools/mint-invite.mjs --local --team 1        # against local dev
 //   node tools/mint-invite.mjs --hours 168 --note Ramesh
 //
@@ -17,10 +18,16 @@ const argv = process.argv.slice(2);
 const has = (f) => argv.includes(f);
 const val = (f, d) => { const i = argv.indexOf(f); return i >= 0 && argv[i + 1] ? argv[i + 1] : d; };
 
-const role = has('--admin') ? 'admin' : 'poster';
+const role = has('--site-admin') ? 'site_admin'
+           : has('--service-admin') ? 'service_admin'
+           : has('--admin') ? 'site_admin'          // legacy spelling
+           : 'poster';
 const local = has('--local');
 const hours = parseInt(val('--hours', '48'), 10);
-const team = val('--team', '1');
+// Site admins land on the global root (900); service admins on a service
+// root (901 = electricity); posters on a crew (1).
+const defaultTeam = role === 'site_admin' ? '900' : role === 'service_admin' ? '901' : '1';
+const team = val('--team', defaultTeam);
 const note = val('--note', null);
 const origin = val('--origin', local ? 'http://localhost:8788' : 'https://kuhuapp.starstucklab.com');
 
@@ -30,8 +37,8 @@ const hash = Buffer.from(
   await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token)),
 ).toString('hex');
 
-const sql = `INSERT INTO invites (token_hash, team_id, role, note, expires_at)
-VALUES ('${hash}', ${Number(team)}, '${role}', ${note ? `'${note.replace(/'/g, "''")}'` : 'NULL'}, datetime('now', '+${hours} hours'));`;
+const sql = `INSERT INTO invites (token_hash, team_id, service_id, role, note, expires_at)
+VALUES ('${hash}', ${Number(team)}, (SELECT service_id FROM teams WHERE id = ${Number(team)}), '${role}', ${note ? `'${note.replace(/'/g, "''")}'` : 'NULL'}, datetime('now', '+${hours} hours'));`;
 
 execFileSync('npx', [
   'wrangler', 'd1', 'execute', 'kuhu',

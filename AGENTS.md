@@ -2,14 +2,21 @@
 
 ## What this is
 
-kuhu is a power-cut notice service: a local electrician's team posts updates
-(region, time window, reason) from their phones in English or हिंदी; subscribed
-households get quiet notifications for the regions they chose; smart devices
-consume the same notices via a JSON API (pull) or MQTT (push). Named for the
-koel's call — heard, never seen. Read `docs/concept.md` before designing
-anything; it encodes the decisions already made (regions as the first-class
-object, hierarchical teams, web push first, Telegram mirror, WhatsApp later,
-no SMS) so they don't get re-litigated.
+kuhu is a community notice service. A crew that keeps something running posts
+updates (area, kind, time window, reason) from their phones in English or
+हिंदी; subscribed households get quiet notifications for the (service, area)
+pairs they chose; smart devices consume the same notices via a JSON API (pull)
+or MQTT (push). Named for the koel's call — heard, never seen.
+
+**Electricity is the first service, not the only one.** A service row carries
+its own name, icon, notice kinds and reason presets, so adding water is an
+`INSERT` plus a crew — never a code change. Nothing in `src/` says
+"electricity".
+
+Read `docs/concept.md` before designing anything; it encodes the decisions
+already made (services as data, shared geography, the team tree as the admin
+hierarchy, web push first, Telegram mirror, WhatsApp later, no SMS) so they
+don't get re-litigated.
 
 ## Family context
 
@@ -45,14 +52,19 @@ which lives at `../starstucklab` on disk alongside the sibling spokes
 ## Guardrails
 
 - Don't invent engineering that hasn't happened. The status line is honest
-  about what is built versus merely intended ("Season 1 · First call": service,
-  admin role, Telegram mirror and MQTT all work; there is still no real crew
-  using it) — keep it that way when things change.
-- **A poster's reach comes from their team, and only their team** — their
-  team's regions plus every descendant team's. Do not add a second source of
+  about what is built versus merely intended ("Season 2 · A second word": services,
+  the three-tier hierarchy, Telegram mirror and MQTT all work; a second service
+  has only been stood up in testing, and there is still no real crew using it) — keep it that way when things change.
+- **A poster's reach comes from their team, and only their team** — the areas
+  their team covers plus every descendant team's. Do not add a second source of
   authority from the region side, even if areas gain a parent/child tree later:
   two sources can disagree and then every permission question needs a tie-break
   someone has to remember. The reasoning is in `docs/concept.md`.
+- **Never hard-code a service's vocabulary.** Kinds and reason presets come
+  from the service row. If you find yourself typing "power cut" into `src/` or
+  `i18n.js`, the design has gone wrong.
+- **Hide what isn't needed.** With one service enabled the interface must never
+  say "service"; with no admin rights the admin section must not render at all.
 - Don't edit sibling repos from here (the hub card is the one exception, done
   from `../starstucklab`).
 - Hindi copy is a first-class deliverable, not a translation afterthought —

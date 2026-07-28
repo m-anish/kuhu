@@ -1,27 +1,32 @@
 # kuhu
 
-![status](https://img.shields.io/badge/status-first_call-8fb573)
-![scope](https://img.shields.io/badge/scope-power--cut_notices-4a5d43)
-![delivery](https://img.shields.io/badge/delivery-web_push-6b8f5a)
-![api](https://img.shields.io/badge/api-JSON_%2B_MQTT-555555)
+![status](https://img.shields.io/badge/status-second_word-8fb573)
+![scope](https://img.shields.io/badge/scope-community_notices-4a5d43)
+![delivery](https://img.shields.io/badge/delivery-push_%2B_telegram_%2B_mqtt-6b8f5a)
+![api](https://img.shields.io/badge/api-JSON-555555)
 ![language](https://img.shields.io/badge/language-EN_%2B_%E0%A4%B9%E0%A4%BF%E0%A4%82%E0%A4%A6%E0%A5%80-d9a866)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
-*A soft call before the power turns.*
+*A soft call before things go off.*
 
 > Heard, never seen. The power steps out at four tomorrow; kuhu thought you'd
 > like to know before it did.
 
-kuhu is a small notice service for power cuts. The people who actually operate
-the local grid — an electrician and their team — post updates from their phones
-in whichever of English or हिंदी they prefer, through an interface with nothing
-on it that doesn't need to be there. Households that have subscribed hear about
-it the way you hear a koel: quietly, from somewhere nearby, before the thing it
-was announcing happens. Gadgets that would rather not be surprised can ask an
-API, or listen on MQTT.
+kuhu carries community notices. The people who actually keep a thing running —
+an electrician, a water operator — post from their phones in whichever of
+English or हिंदी they prefer, through an interface with nothing on it that
+doesn't need to be there. Households that have subscribed hear about it the way
+you hear a koel: quietly, from somewhere nearby, before the thing it was
+announcing happens. Gadgets that would rather not be surprised can ask an API,
+or listen on MQTT.
+
+**Electricity is the first service, not the only possible one.** Water, or
+anything else a neighbourhood needs warning about, is a row in a table carrying
+its own vocabulary — not a fork of this code.
 
 A [starstucklab](https://starstucklab.com) project. Site:
-[kuhu.starstucklab.com](https://kuhu.starstucklab.com)
+[kuhu.starstucklab.com](https://kuhu.starstucklab.com) · App:
+[kuhuapp.starstucklab.com](https://kuhuapp.starstucklab.com)
 
 ---
 
@@ -29,62 +34,75 @@ A [starstucklab](https://starstucklab.com) project. Site:
 
 Three audiences, one notice:
 
-- **The team posts.** A lineman taps out a notice — region, window, reason —
-  in under a minute, bilingual by choice, from a phone with monsoon rain on the
-  screen. No dashboards to learn. No accounts to forget.
-- **Households listen.** Subscribers pick the region (or regions) they care
-  about and get a quiet notification before a cut, and nothing else, ever.
-- **Gadgets ask, or subscribe.** A plain cache-friendly JSON API for devices
-  that poll (`GET /api/regions/{id}/next-cuts`), and an MQTT topic tree
-  (`kuhu/<region>/cuts`) for devices that prefer to be told — which includes
-  kuhu's own siblings; [jigawatt](https://github.com/m-anish/jigawatt) and
-  [lokki](https://github.com/m-anish/lokki) already speak MQTT.
+- **A crew posts.** Area, kind, window, reason — under a minute, bilingual by
+  choice, from a phone with monsoon rain on the screen. Each crew sees only its
+  own service, so nobody scrolls past somebody else's job.
+- **Households listen.** Subscribers pick what they want warning about — this
+  area's power, that area's water — and get a quiet notification before it
+  happens, and nothing else, ever.
+- **Gadgets ask, or subscribe.** Cache-friendly JSON at
+  `GET /api/services/<service>/areas/<area>/notices`, and retained MQTT on
+  `kuhu/<service>/<area>/notices` for devices that prefer to be told — which
+  includes kuhu's own siblings; [jigawatt](https://github.com/m-anish/jigawatt)
+  and [lokki](https://github.com/m-anish/lokki) already speak MQTT.
 
-**Regions are the first-class object.** A notice is published *to a region*,
-not to the world. Teams are scoped to regions and nest — a district office
-above area teams above linemen — with permissions flowing downward, enforced by
-a recursive query and verified in practice. The full concept, including the
-delivery-channel reasoning (web push first, a Telegram mirror nearly free,
-WhatsApp later, SMS never — DLT paperwork is its own kind of power cut), lives
-in [docs/concept.md](docs/concept.md).
+## How it is put together
 
-## Architecture
+**A service is data.** Its name, icon, accent, the kinds of notice it can carry
+("power cut", "no supply", "tanker coming") and its reason presets all live in
+one row. Adding water needs an `INSERT` and a crew — no deploy.
 
-- **One PWA, two faces** — a big-button posting screen for the team at `/post`,
+**Geography is shared.** Naddi is Naddi whether the notice is about power or
+water, so areas belong to nobody. Each crew declares which areas it answers
+for.
+
+**Authority is one tree.** Site admins sit above service admins, who sit above
+crews:
+
+```
+kuhu                        ← site admins      every service
+  └── Electricity           ← service admins   one service
+        └── Local line crew ← posters          their own areas
+```
+
+Role decides what powers you have; position in the tree decides what you can
+see. One recursive query answers "what may this person touch?" at every level,
+which is why a site admin is not a special case anywhere in the code.
+
+**Complexity hides itself.** With a single service switched on, the word
+"service" never appears in the interface. A lineman is shown areas, a window
+and a reason — nothing else.
+
+## Getting a notice out
+
+- **One PWA, two faces** — a big-button posting screen for the crew at `/post`,
   a subscribe screen for everyone else at `/`. Installable, offline-tolerant,
   no app store between a lineman and the publish button.
-- **Invite links, not OTPs** — an admin mints a link, shares it on WhatsApp, and
-  it dies the moment it is used (or when it expires, or if they cancel it). The
-  role is decided by the admin before the link exists, so the person joining has
-  nothing to configure. Only hashes are stored. No SMS, no DLT paperwork, no
-  per-message cost.
-- **An admin role** — admins invite and remove people, add areas, and rename
-  them. A team cannot lock itself out: nobody can revoke themselves, and the
-  last admin cannot be removed.
-- **Payloadless web push** — the server tickles the subscription, the service
-  worker asks what changed and shows one notification. Notice text never rests
-  inside a third-party push service.
-- **Cloudflare Workers + D1**, same shelf as the rest of the lab.
+- **Invite links, not passwords** — an admin mints a link, shares it on
+  WhatsApp, and it dies the moment it is used. The role is decided before the
+  link exists.
+- **Three ways out at once** — payloadless web push, a Telegram mirror, and
+  retained MQTT. None of them can fail a notice; the notice is the thing that
+  matters.
 
-Details, endpoints, and deployment: [service/README.md](service/README.md).
+Details, endpoints and deployment: [service/README.md](service/README.md).
 
 ## Status
 
-**Season 1 · First call — beta.** The service is built and deployed at
-[kuhuapp.starstucklab.com](https://kuhuapp.starstucklab.com): posting to one or
-several areas, subscribing, cancelling, invite links, the admin role, the
-public API, and the team hierarchy all work end to end. Six real areas around
-Dharamshala are configured. What it does not yet have is a real crew using it,
-MQTT publishing, or a Telegram mirror — see [docs/roadmap.md](docs/roadmap.md).
-It has not met a monsoon. Notices so far have been posted only by its author,
-to an empty audience. They went through.
+**Season 2 · A second word — beta.** Posting, subscribing, cancelling, invite
+links, the three-tier admin hierarchy, the public API and both mirrors work end
+to end, and a second service has been stood up in testing and taken down again,
+which is the only honest way to claim the multi-service part. Six real areas
+around Dharamshala are configured. What it still does not have is a real crew
+using it. It has not met a monsoon. See
+[docs/roadmap.md](docs/roadmap.md).
 
 ## Repository
 
 | Path | What |
 |---|---|
 | [`site/`](site/) | Marketing/landing site (Cloudflare Pages → kuhu.starstucklab.com) |
-| [`docs/concept.md`](docs/concept.md) | The product concept: actors, regions, channels, API shape |
+| [`docs/concept.md`](docs/concept.md) | The product concept and every settled decision |
 | [`docs/roadmap.md`](docs/roadmap.md) | What's next, what's refused, and why |
 | [`service/`](service/) | The service itself — Cloudflare Worker + D1 + the two-faced PWA |
 

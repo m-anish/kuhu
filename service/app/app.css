@@ -253,8 +253,31 @@ button.big:disabled { opacity: 0.45; cursor: default; }
 button.big.ghost { background: transparent; border: 1px solid var(--border); color: var(--text); font-weight: 500; }
 button.big.warn { background: var(--alarm); color: var(--alarm-fg); }
 
-/* ---------- chips (regions, reason presets, quick windows) ---------- */
+/* ---------- chips (areas, reason presets, quick windows) ---------- */
 .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+/* A service label above its own group of areas. Only rendered when more than
+   one service exists — with a single service there is nothing to label. */
+.svc-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 1.1rem 0 0.55rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.svc-head:first-child { margin-top: 0; }
+.svc-head .svc-icon { font-size: 1rem; line-height: 1; }
+.svc-head::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--svc-accent, var(--sage)) 35%, transparent);
+}
+
+#regions .chips + .svc-head { margin-top: 1.4rem; }
 
 .chip {
   appearance: none;

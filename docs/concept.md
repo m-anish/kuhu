@@ -12,6 +12,12 @@ repairs) — and yet the knowledge travels by word of mouth, arriving after the
 inverter is already beeping. The people with the information have no simple way
 to publish it; the people who want it have no simple way to receive it.
 
+Electricity is not special in this. Water arrives on a schedule that changes
+without warning; roads close; a tank gets cleaned. The same gap exists for each
+of them, and the same small machine closes it. kuhu therefore carries
+**community notices**, of which power cuts are the first kind — one product,
+several services, rather than one app per utility.
+
 ## The actors
 
 1. **The team** — a local electrician and their crew. They post notices from
@@ -27,18 +33,20 @@ to publish it; the people who want it have no simple way to receive it.
 
 ## Decisions already made
 
-### Regions are the first-class object
-A notice is published *to a region* (locality / ward / feeder / village), not
-to the world. A subscription is a set of regions. The API namespaces by region
-from day one (`/api/regions`, `/api/regions/{id}/next-cuts`) so multi-region
-growth is not a breaking change.
+### A notice belongs to a service AND an area
+Not to the world. An area is a locality / ward / feeder / village; a service is
+electricity, water, or whatever comes next. A subscription is a set of
+(service, area) pairs, so somebody can follow water for the village and
+electricity for the shop without following either everywhere. The API
+namespaces by both: `/api/services`, then
+`/api/services/{service}/areas/{area}/notices`.
 
-### Teams are scoped and can nest
-A team owns one or more regions. `team.parent_id` exists from the first schema:
-a district office is a parent team whose scope is the union of its children's.
-Permissions flow downward (post to your regions, see your subtree). **v1 ships
-with exactly one team and one region** — the hierarchy costs nothing now and
-saves a migration later.
+### Teams nest, and that tree is also the admin hierarchy
+`teams.parent_id` gives a crew a parent. Rooting it properly turns it into the
+whole authority model: a global `kuhu` team holds site admins, a service root
+holds that service's admins, crews hang beneath. Permissions flow downward —
+you may reach your own areas plus every crew below you. A crew's areas live in
+`team_regions` rather than on the area itself, because geography is shared.
 
 ### Delivery channels, in order
 1. **Web push via a PWA** (core, v1): free, no per-message cost, works on
@@ -51,11 +59,14 @@ saves a migration later.
 4. **SMS: no.** DLT registration in India is its own kind of power cut.
 
 ### Gadget API — both pull and push
-- **Pull (canonical):** `GET /api/regions/{id}/next-cuts` — plain JSON,
-  aggressively cacheable (edge-cached; notices change rarely). Dumb devices
-  poll every few minutes and that's fine.
-- **Push (courtesy):** MQTT topic tree `kuhu/<region>/cuts`, retained
-  messages. Fits the family: jigawatt and lokki already speak MQTT.
+- **Pull (canonical):** `GET /api/services/{service}/areas/{area}/notices` —
+  plain JSON, aggressively cacheable. Dumb devices poll every few minutes and
+  that's fine.
+- **Push (courtesy):** retained MQTT on `kuhu/<service>/<area>/notices`. The
+  service is in the path so a device can subscribe to exactly what it cares
+  about (`kuhu/electricity/+/notices`), and it says "notices" rather than
+  "cuts" because a cut is an electricity word. Fits the family: jigawatt and
+  lokki already speak MQTT.
 - Webhooks: later, if anyone asks.
 
 ### Bilingual by construction
@@ -73,18 +84,23 @@ Cloudflare Workers + D1 (+ KV for push subscriptions), one PWA with two faces
 ```json
 {
   "id": "ntc_...",
-  "region": "ward-3",
+  "service": "electricity",
+  "area": "naddi",
   "kind": "cut",
   "window": { "from": "2026-07-28T16:00+05:30", "to": "2026-07-28T18:00+05:30" },
   "reason": { "en": "Line maintenance", "hi": "लाइन की मरम्मत" },
-  "posted_by": "team_...",
+  "posted_by": "...",
   "posted_at": "...",
-  "status": "scheduled | live | done | cancelled"
+  "status": "scheduled | cancelled",
+  "batch_id": "bat_..."
 }
 ```
 
-`kind` is open beyond `cut` (voltage advisory, restoration ETA, "it's back") —
-"primarily power cuts, but other things might be there."
+`kind` is defined by the service, not by this schema: electricity offers
+`cut / advisory / restored`, water would offer `supply_cut / advisory /
+tanker`. Posting to several areas at once writes one row per area sharing a
+`batch_id`, so the act can be shown, and cancelled, as the single thing it
+was.
 
 ## Open questions
 
@@ -95,12 +111,30 @@ Cloudflare Workers + D1 (+ KV for push subscriptions), one PWA with two faces
   (which is where this crew already lives), and it dies on first use. The
   burden sits with the admin, which is the right place for it: they know their
   own crew, so they are the identity check. Only hashes are stored.
-- *Roles* → `poster` and `admin`. Admins invite, remove, and manage areas. Two
-  server-side invariants stop a team locking itself out: no self-revocation,
-  and the last admin cannot be removed.
+- *Roles* → `poster`, `service_admin`, `site_admin`. Admins invite, remove and
+  manage coverage; only a site admin edits geography, because areas are shared
+  by every service. Three server-side invariants stop anyone locking anyone
+  out: no self-revocation, nobody may grant or revoke authority above their
+  own, and the last site admin cannot be removed.
 - *Renaming areas* → admins can change display names freely; the slug is
   immutable because it is in the public API URL and in every subscriber's saved
   selection.
+- *Services are data, not code* → a service row carries its own name, icon,
+  accent, notice kinds and reason presets. Adding water is an `INSERT` plus a
+  crew; nothing is deployed, and no code anywhere says the word "electricity".
+  The alternative — a `kind` enum in the schema and a translation string per
+  kind — makes every new facet a migration and a release.
+- *Geography is shared between services* → Naddi is Naddi whether the notice is
+  about power or water, so areas have no owner. Which areas a crew answers for
+  lives in a join table, which also means two services can cover the same
+  village without arguing about it.
+- *The admin hierarchy is the team tree* → site admin above service admin above
+  crew, expressed as position in the same nested-team structure that already
+  existed. Role grants powers; position grants visibility. A site admin is not
+  a special case in any query — they simply sit at the root.
+- *Complexity is hidden until earned* → with one service enabled, the interface
+  never says "service". The switcher appears only for someone who can reach
+  more than one.
 - *Where a poster's reach comes from* → **their team, and only their team.**
   A poster may post to their team's regions plus every descendant team's. Reach
   is deliberately **not** derived from a region hierarchy as well. Two sources
@@ -125,8 +159,6 @@ Cloudflare Workers + D1 (+ KV for push subscriptions), one PWA with two faces
 - Whether "it's back" notifications are default-on. The `restored` kind exists
   and can be posted, but it spends the one-notification-per-cut budget twice —
   probably it should be opt-in per subscriber.
-- MQTT publishing (`kuhu/<region>/cuts`, retained). Designed, not built; the
-  JSON poll endpoint covers gadgets meanwhile.
 - Free-text reasons are stored only in the language they were typed in — kuhu
   will not invent a translation it cannot vouch for. Whether the other language
   should get an assisted (clearly-marked) translation is undecided.

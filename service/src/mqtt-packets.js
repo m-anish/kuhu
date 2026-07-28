@@ -51,7 +51,12 @@ export function buildPublish(topic, payload, { retain = true } = {}) {
 
 export const DISCONNECT = new Uint8Array([0xe0, 0x00]);
 
-/** `kuhu/<region>/cuts` — one retained payload describing that area's state. */
-export function topicFor(slug) {
-  return `kuhu/${slug}/cuts`;
+/**
+ * `kuhu/<service>/<area>/notices` — one retained payload per service per area.
+ * The service is in the path so a device can subscribe to exactly what it
+ * cares about (`kuhu/electricity/+/notices`), and "notices" rather than "cuts"
+ * because a cut is an electricity word and this tree is not only electricity.
+ */
+export function topicFor(service, area) {
+  return `kuhu/${service}/${area}/notices`;
 }

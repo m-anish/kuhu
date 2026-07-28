@@ -52,6 +52,12 @@
     <h1 data-s="post_title">Post a notice.</h1>
     <p class="lede" data-s="post_lede"></p>
 
+    <!-- Only rendered when this person reaches more than one service. -->
+    <div id="service-row" class="hidden">
+      <h2 data-s="service">Service</h2>
+      <div id="services" class="chips"></div>
+    </div>
+
     <h2 data-s="area">Area</h2>
     <div id="areas" class="chips"></div>
 
@@ -124,29 +130,38 @@
         </div>
       </details>
 
+      <!-- Coverage: which areas this crew answers for, on this service. -->
       <details class="acc" id="acc-areas">
         <summary>
-          <span class="acc-title" data-s="areas_admin">Areas</span>
+          <span class="acc-title" data-s="coverage_title">Areas we cover</span>
           <span class="acc-count" id="count-areas"></span>
         </summary>
         <div class="acc-body">
-          <div id="areas-admin"></div>
+          <p class="hint-p" data-s="coverage_help"></p>
+          <div id="coverage" class="chips"></div>
 
-          <h4 data-s="add_area">Add an area</h4>
-          <label class="field">
-            <span data-s="area_en">Name in English</span>
-            <input id="new-en">
-          </label>
-          <label class="field">
-            <span data-s="area_hi">नाम (हिंदी)</span>
-            <input id="new-hi">
-          </label>
-          <label class="field">
-            <span data-s="area_slug">Short id (permanent)</span>
-            <input id="new-slug" autocapitalize="none" spellcheck="false">
-            <small class="hint" data-s="area_slug_help"></small>
-          </label>
-          <button id="add-area" class="big" type="button" data-s="save_area">Add area</button>
+          <!-- Geography itself is site-wide, so only a site admin edits it. -->
+          <div id="geography" class="hidden">
+            <h4 data-s="geography_title">All areas on kuhu</h4>
+            <p class="hint-p" data-s="geography_help"></p>
+            <div id="areas-all"></div>
+
+            <h4 data-s="add_area">Add an area</h4>
+            <label class="field">
+              <span data-s="area_en">Name in English</span>
+              <input id="new-en">
+            </label>
+            <label class="field">
+              <span data-s="area_hi">नाम (हिंदी)</span>
+              <input id="new-hi">
+            </label>
+            <label class="field">
+              <span data-s="area_slug">Short id (permanent)</span>
+              <input id="new-slug" autocapitalize="none" spellcheck="false">
+              <small class="hint" data-s="area_slug_help"></small>
+            </label>
+            <button id="add-area" class="big" type="button" data-s="save_area">Add area</button>
+          </div>
         </div>
       </details>
     </section>

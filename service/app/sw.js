@@ -6,7 +6,7 @@
 // a third-party push service, and the payload cannot go stale between send
 // and delivery.
 
-const CACHE = 'kuhu-shell-v10';
+const CACHE = 'kuhu-shell-v12';
 // Canonical paths only — the asset server redirects /index.html and /post.html
 // to these, and a cached redirect is worse than no cache at all.
 const SHELL = ['/', '/post', '/join', '/app.css', '/i18n.js', '/subscribe.js', '/post.js', '/join.js', '/icon.svg', '/icon-192.png'];
@@ -114,11 +114,16 @@ self.addEventListener('push', (event) => {
       return;
     }
 
-    const region = lang === 'hi' ? n.region.name_hi : n.region.name_en;
+    // The service supplies its own icon and its own word for what happened, so
+    // this worker knows nothing about electricity and a water notice reads
+    // correctly without a change here.
+    const area = lang === 'hi' ? n.area.name_hi : n.area.name_en;
     const why = (lang === 'hi' ? n.reason.hi : n.reason.en) || n.reason.en || n.reason.hi || '';
-    const heading = n.status === 'cancelled'
-      ? (lang === 'hi' ? `${region} — सूचना रद्द` : `${region} — notice cancelled`)
-      : (lang === 'hi' ? `${region} — बिजली कटौती` : `${region} — power cut`);
+    const what = n.status === 'cancelled'
+      ? (lang === 'hi' ? 'सूचना रद्द' : 'notice cancelled')
+      : (lang === 'hi' ? n.kind_label.hi : n.kind_label.en);
+    const icon = n.service?.icon ? `${n.service.icon} ` : '';
+    const heading = `${icon}${area} — ${what}`;
     const body = [formatWindow(n.from, n.to, lang), why].filter(Boolean).join(' · ');
 
     await self.registration.showNotification(heading, {

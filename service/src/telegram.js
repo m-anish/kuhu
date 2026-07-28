@@ -26,12 +26,6 @@ function fmtWindow(fromIso, toIso, lang) {
     : `${day.format(from)} ${time.format(from)} ${word} ${day.format(to)} ${time.format(to)}`;
 }
 
-const HEAD = {
-  cut:      { en: 'Power cut',  hi: 'बिजली कटौती' },
-  advisory: { en: 'Advisory',   hi: 'सूचना' },
-  restored: { en: 'Restored',   hi: 'बिजली बहाल' },
-};
-
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 }
@@ -39,20 +33,28 @@ function escapeHtml(s) {
 /**
  * Compose the channel message. Bilingual, because the channel has both kinds
  * of reader and neither should have to guess.
+ *
+ * The service supplies its own icon and its own word for what happened — this
+ * function knows nothing about electricity, so a water notice reads correctly
+ * without a code change here.
  */
-export function composeMessage({ kind, status, from, to, reason_en, reason_hi, areas_en, areas_hi }) {
+export function composeMessage({
+  status, from, to, reason_en, reason_hi, areas_en, areas_hi,
+  service_en, service_hi, icon, kind_en, kind_hi,
+}) {
   const cancelled = status === 'cancelled';
-  const head = HEAD[kind] || HEAD.cut;
-  const mark = cancelled ? '⊘' : (kind === 'restored' ? '✓' : '⚡');
+  const mark = cancelled ? '⊘' : (icon || '•');
 
   const en = [
-    `${mark} <b>${escapeHtml(areas_en)}</b> — ${escapeHtml(head.en)}${cancelled ? ' (cancelled)' : ''}`,
+    `${mark} <b>${escapeHtml(areas_en)}</b> — ${escapeHtml(kind_en)}${cancelled ? ' (cancelled)' : ''}`,
+    service_en ? `<i>${escapeHtml(service_en)}</i>` : '',
     escapeHtml(fmtWindow(from, to, 'en')),
     reason_en ? escapeHtml(reason_en) : '',
   ].filter(Boolean).join('\n');
 
   const hi = [
-    `<b>${escapeHtml(areas_hi)}</b> — ${escapeHtml(head.hi)}${cancelled ? ' (रद्द)' : ''}`,
+    `<b>${escapeHtml(areas_hi)}</b> — ${escapeHtml(kind_hi)}${cancelled ? ' (रद्द)' : ''}`,
+    service_hi ? `<i>${escapeHtml(service_hi)}</i>` : '',
     escapeHtml(fmtWindow(from, to, 'hi')),
     reason_hi ? escapeHtml(reason_hi) : '',
   ].filter(Boolean).join('\n');

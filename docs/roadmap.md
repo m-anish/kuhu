@@ -1,6 +1,6 @@
 # kuhu — roadmap and ideas
 
-*Last revised 2026-07-27. This is the thinking-ahead file: what is built, what
+*Last revised 2026-07-28. This is the thinking-ahead file: what is built, what
 is next, what is deliberately refused, and why. Decisions already settled live
 in [concept.md](concept.md); this is where the unsettled things wait.*
 
@@ -21,15 +21,22 @@ The service runs at [kuhuapp.starstucklab.com](https://kuhuapp.starstucklab.com)
   follows three of them.
 - **Invite links**: single-use, expiring, role baked in by the admin, shared
   over WhatsApp. No codes, no passwords.
-- **Admin role**: invite, remove, add areas, rename areas. Cannot self-revoke;
-  last admin cannot be removed.
+- **Admins**: invite, remove, manage which areas a crew covers. Nobody may
+  self-revoke or hand out authority above their own, and the last site admin
+  cannot be removed.
 - **Self-service phone move**: mint a 30-minute link on the old phone, open it
   on the new one, old phone signs out.
 - Public JSON API for gadgets, payloadless web push for people.
 - **Telegram mirror** (`@kuhunotices`) and **retained MQTT**
-  (`kuhu/<area>/cuts`, HiveMQ) — neither able to fail a notice, and both
-  silently off until configured. An hourly cron clears retained payloads once
-  their window has passed.
+  (`kuhu/<service>/<area>/notices`, HiveMQ) — neither able to fail a notice,
+  and both silently off until configured. An hourly cron clears retained
+  payloads once their window has passed.
+- **Several services**, of which electricity is the first. A service carries
+  its own kinds and reason presets as data, so adding one is an `INSERT` and a
+  crew rather than a release.
+- **A three-tier hierarchy** — site admin, service admin, crew — expressed as
+  position in the team tree, with contextual visibility at every level and the
+  whole thing hidden while only one service exists.
 - Admin panel as collapsible sections; the subscriber face points at Telegram
   and at the API/MQTT for anyone who would rather not use notifications.
 - Storage-container warnings and a paste-a-link fallback, because an installed
@@ -39,9 +46,15 @@ The service runs at [kuhuapp.starstucklab.com](https://kuhuapp.starstucklab.com)
 
 ## Next — small, and probably worth it
 
-**Per-region Telegram channels.** Today the mirror posts every area to one
-channel. A district would want one channel per area — the schema change is a
-`telegram_chat_id` on `regions` plus an admin field.
+**Per-service Telegram channels.** Today every service and area lands in one
+channel, which will not survive a second service — nobody wants water notices
+in a power-cut channel. The schema change is a `telegram_chat_id` on
+`services` (and later on `regions`) plus an admin field.
+
+**Service management in the app.** A site admin can already do everything
+*except* create a service: that is still an `INSERT`, because the editor for
+kinds and reason presets is real design work and there is exactly one service
+to manage. Worth building when there are three.
 
 **Devices should ignore stale retained state anyway.** The hourly cron clears
 expired topics, but a device that boots in the gap between expiry and the next

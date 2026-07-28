@@ -1,22 +1,46 @@
-// The listening face. Pick areas, allow one quiet notification, see what's next.
+// The listening face. Pick what you want warned about, allow one quiet
+// notification, see what's coming.
+//
+// kuhu carries several services. When only one is switched on — which is the
+// case today — the service layer is hidden entirely and this looks exactly
+// like a list of areas. Complexity appears only when it has earned its place.
 
 import { STRINGS, pickLang, setLang, fmtWindow, initTheme } from '/i18n.js';
 
 let lang = pickLang();
-let regions = [];
-let chosen = new Set(JSON.parse(localStorage.getItem('kuhu.regions') || '[]'));
+let services = [];
+/** Chosen topics as "service/area" strings — one flat set, easy to store. */
+let chosen = new Set(loadChosen());
 
 const $ = (sel) => document.querySelector(sel);
 const flash = $('#flash');
+const t = (key) => STRINGS[lang][key];
+const key = (svc, area) => `${svc}/${area}`;
 
-function t(key) { return STRINGS[lang][key]; }
+/** Read saved topics, migrating the pre-services shape (bare area slugs). */
+function loadChosen() {
+  const topics = JSON.parse(localStorage.getItem('kuhu.topics') || 'null');
+  if (Array.isArray(topics)) return topics.map((x) => key(x.service, x.area));
+  const legacy = JSON.parse(localStorage.getItem('kuhu.regions') || '[]');
+  return legacy.map((slug) => key('electricity', slug));   // everything was electricity
+}
+
+function saveChosen() {
+  const topics = [...chosen].map((k) => {
+    const [service, area] = k.split('/');
+    return { service, area };
+  });
+  localStorage.setItem('kuhu.topics', JSON.stringify(topics));
+  localStorage.removeItem('kuhu.regions');
+}
+
+function name(o) { return lang === 'hi' ? o.name_hi : o.name_en; }
 
 function paintStrings() {
   setLang(lang);
   for (const el of document.querySelectorAll('[data-s]')) {
-    const key = el.dataset.s;
-    if (key === 'notify_me') continue;      // handled by paintNotifyButton
-    el.textContent = t(key);
+    if (el.dataset.s === 'notify_me') continue;      // paintNotifyButton owns it
+    el.textContent = t(el.dataset.s);
   }
   for (const b of document.querySelectorAll('.lang button')) {
     b.setAttribute('aria-pressed', String(b.dataset.lang === lang));
@@ -28,44 +52,66 @@ function say(msg, kind = 'ok') {
   flash.className = `flash ${kind}`;
 }
 
-// ---------- regions ----------
+// ---------- what you can pick ----------
 
-async function loadRegions() {
-  const res = await fetch('/api/regions');
-  regions = (await res.json()).regions || [];
-  paintRegions();
+async function loadServices() {
+  const res = await fetch('/api/services');
+  services = (await res.json()).services || [];
+  paintPicker();
   paintUpcoming();
   paintApiExample();
 }
 
-function paintRegions() {
+/**
+ * One service: a plain list of areas, no mention of services anywhere.
+ * Several: a labelled block per service. Same markup either way, so nothing
+ * has to be re-learned when a second service arrives.
+ */
+function paintPicker() {
   const box = $('#regions');
   box.textContent = '';
-  for (const r of regions) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'chip';
-    b.dataset.slug = r.slug;
-    b.setAttribute('aria-pressed', String(chosen.has(r.slug)));
-    b.textContent = lang === 'hi' ? r.name_hi : r.name_en;
-    b.addEventListener('click', () => {
-      chosen.has(r.slug) ? chosen.delete(r.slug) : chosen.add(r.slug);
-      localStorage.setItem('kuhu.regions', JSON.stringify([...chosen]));
-      b.setAttribute('aria-pressed', String(chosen.has(r.slug)));
-      paintUpcoming();
-      paintApiExample();
-      if (currentSubscription) syncSubscription(currentSubscription);   // keep push in step
-    });
-    box.append(b);
+  const single = services.length === 1;
+
+  for (const svc of services) {
+    if (!single) {
+      const head = document.createElement('div');
+      head.className = 'svc-head';
+      head.innerHTML = `<span class="svc-icon" aria-hidden="true"></span><span class="svc-name"></span>`;
+      head.querySelector('.svc-icon').textContent = svc.icon || '';
+      head.querySelector('.svc-name').textContent = name(svc);
+      head.style.setProperty('--svc-accent', svc.accent || 'var(--sage)');
+      box.append(head);
+    }
+    const chips = document.createElement('div');
+    chips.className = 'chips';
+    for (const area of svc.regions) {
+      const k = key(svc.slug, area.slug);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip';
+      b.textContent = name(area);
+      b.setAttribute('aria-pressed', String(chosen.has(k)));
+      if (!single) b.setAttribute('aria-label', `${name(area)} — ${name(svc)}`);
+      b.addEventListener('click', () => {
+        chosen.has(k) ? chosen.delete(k) : chosen.add(k);
+        saveChosen();
+        b.setAttribute('aria-pressed', String(chosen.has(k)));
+        paintUpcoming();
+        paintApiExample();
+        if (currentSubscription) syncSubscription(currentSubscription);
+      });
+      chips.append(b);
+    }
+    box.append(chips);
   }
 }
 
-/** Point the "see the JSON" link at an area the reader actually cares about. */
 function paintApiExample() {
   const link = $('#api-example');
   if (!link) return;
-  const slug = [...chosen][0] || regions[0]?.slug;
-  link.href = slug ? `/api/regions/${slug}/next-cuts` : '/api/regions';
+  const first = [...chosen][0];
+  const [svc, area] = first ? first.split('/') : [services[0]?.slug, services[0]?.regions?.[0]?.slug];
+  link.href = svc && area ? `/api/services/${svc}/areas/${area}/notices` : '/api/services';
 }
 
 // ---------- what's coming ----------
@@ -74,31 +120,47 @@ async function paintUpcoming() {
   const box = $('#upcoming');
   box.textContent = '';
   if (chosen.size === 0) {
-    box.innerHTML = `<p class="empty">${t('pick_one')}</p>`;
+    box.innerHTML = `<p class="empty">${escapeHtml(t('pick_one'))}</p>`;
     return;
   }
-  const lists = await Promise.all([...chosen].map(async (slug) => {
-    const res = await fetch(`/api/regions/${slug}/next-cuts`);
+  const lists = await Promise.all([...chosen].map(async (k) => {
+    const [svc, area] = k.split('/');
+    const res = await fetch(`/api/services/${svc}/areas/${area}/notices`);
     if (!res.ok) return [];
     const data = await res.json();
-    return (data.notices || []).map((n) => ({ ...n, region: data.region }));
+    return (data.notices || []).map((n) => ({ ...n, service: data.service, area: data.area }));
   }));
-  const all = lists.flat().sort((a, b) => Date.parse(a.from) - Date.parse(b.from));
+
+  // One posting act shows once, even when it covered several areas you follow.
+  const seen = new Map();
+  for (const n of lists.flat()) {
+    const k = n.batch_id || n.id;
+    if (!seen.has(k)) seen.set(k, { ...n, areas: [n.area] });
+    else seen.get(k).areas.push(n.area);
+  }
+  const all = [...seen.values()].sort((a, b) => Date.parse(a.from) - Date.parse(b.from));
   if (all.length === 0) {
-    box.innerHTML = `<p class="empty">${t('none_upcoming')}</p>`;
+    box.innerHTML = `<p class="empty">${escapeHtml(t('none_upcoming'))}</p>`;
     return;
   }
   for (const n of all) box.append(noticeEl(n));
 }
 
+/** The service supplies its own word for what happened. */
+function kindLabel(n) {
+  const svc = services.find((s) => s.slug === n.service?.slug);
+  const k = svc?.kinds.find((x) => x.key === n.kind);
+  return k ? name(k) : n.kind;
+}
+
 function noticeEl(n) {
   const el = document.createElement('div');
   el.className = 'notice';
-  const region = lang === 'hi' ? n.region.name_hi : n.region.name_en;
-  const kind = t(`kind_${n.kind}`) || n.kind;
+  const areas = n.areas.map(name).join(' · ');
   const why = (lang === 'hi' ? n.reason.hi : n.reason.en) || n.reason.en || n.reason.hi || '';
+  const icon = n.service?.icon ? `${n.service.icon} ` : '';
   el.innerHTML = `
-    <div class="meta"><span>${escapeHtml(region)}</span><span class="kind">${escapeHtml(kind)}</span></div>
+    <div class="meta"><span>${escapeHtml(areas)}</span><span class="kind">${escapeHtml(icon + kindLabel(n))}</span></div>
     <div class="when">${escapeHtml(fmtWindow(n.from, n.to, lang))}</div>
     ${why ? `<div class="why">${escapeHtml(why)}</div>` : ''}`;
   return el;
@@ -111,7 +173,6 @@ function escapeHtml(s) {
 // ---------- push ----------
 
 let currentSubscription = null;
-
 const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 
 function paintNotifyButton() {
@@ -139,7 +200,7 @@ async function syncSubscription(sub) {
     body: JSON.stringify({
       endpoint: sub.endpoint,
       keys: sub.toJSON().keys,
-      regions: [...chosen],
+      topics: [...chosen].map((k) => { const [service, area] = k.split('/'); return { service, area }; }),
       lang,
     }),
   });
@@ -150,10 +211,10 @@ async function enable() {
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') return say(t('push_denied'), 'bad');
   const reg = await navigator.serviceWorker.ready;
-  const { key } = await (await fetch('/api/vapid-key')).json();
+  const { key: vapid } = await (await fetch('/api/vapid-key')).json();
   const sub = await reg.pushManager.subscribe({
     userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(key),
+    applicationServerKey: urlBase64ToUint8Array(vapid),
   });
   await syncSubscription(sub);
   currentSubscription = sub;
@@ -181,7 +242,7 @@ for (const b of document.querySelectorAll('.lang button')) {
   b.addEventListener('click', () => {
     lang = b.dataset.lang;
     paintStrings();
-    paintRegions();
+    paintPicker();
     paintUpcoming();
     paintNotifyButton();
     theme?.repaint();
@@ -194,7 +255,7 @@ $('#notify').addEventListener('click', () => (currentSubscription ? disable() : 
 const theme = initTheme(t);
 paintStrings();
 paintNotifyButton();
-loadRegions();
+loadServices();
 
 if (pushSupported) {
   navigator.serviceWorker.register('/sw.js').then(async () => {

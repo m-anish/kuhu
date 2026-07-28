@@ -1,39 +1,40 @@
-// kuhu — the service. Cloudflare Worker + D1.
+// kuhu — community notices. Cloudflare Worker + D1.
+//
+// Electricity is the first service, not the only possible one. A notice
+// belongs to a (service, area) pair; who may post it comes from the team tree
+// (see scope.js), and what a notice may *say* comes from the service's own
+// kinds and reasons, which are data rather than code.
 //
 // Public:
-//   GET  /api/regions                      list regions
-//   GET  /api/regions/:slug/next-cuts      upcoming notices for one region (cacheable)
-//   GET  /api/vapid-key                    the push public key
-//   GET  /api/invites/preview?t=…          who is inviting me, and as what
-//   POST /api/invites/redeem               {token, name, phone} → poster token
+//   GET  /api/services                              enabled services + their areas
+//   GET  /api/services/:svc/areas/:area/notices     what's coming, cacheable
+//   GET  /api/vapid-key
+//   GET  /api/invites/preview?t=…
+//   POST /api/invites/redeem
 //
 // Poster (Bearer):
-//   POST /api/notices                      publish
+//   GET  /api/me                                    who am I, what may I reach
+//   POST /api/notices                               {service, regions[], …}
 //   POST /api/notices/:id/cancel
-//   GET  /api/team/regions                 regions this poster may post to
-//   GET  /api/team/notices                 the team's recent notices
-//   GET  /api/me                           who am I, and what may I do
+//   GET  /api/team/notices
+//   POST /api/me/move
 //
-// Admin (Bearer, role=admin):
-//   POST /api/invites                      mint a single-use link
-//   GET  /api/invites                      outstanding + recently used
-//   POST /api/invites/:id/revoke
-//   GET  /api/team/members
-//   POST /api/team/members/:id/revoke
-//   POST /api/regions                      add an area
-//   POST /api/regions/:slug/rename         rename an area (display names only)
+// Admin (service_admin within its service; site_admin everywhere):
+//   POST /api/invites            GET /api/invites            POST /api/invites/:id/revoke
+//   GET  /api/team/members       POST /api/team/members/:id/revoke
+//   GET/POST /api/services/:svc/areas              this service's own areas
+//   POST /api/services/:svc/areas/:area/rename
+//   POST /api/services/:svc/coverage               which areas a crew covers
 //
 // Subscriber:
-//   POST   /api/subscriptions
-//   DELETE /api/subscriptions
-//   POST   /api/subscriptions/pending
+//   POST /api/subscriptions   DELETE /api/subscriptions   POST /api/subscriptions/pending
 
 import { json, badRequest, unauthorized, forbidden, notFound, corsPreflight, randomId, randomToken, sha256hex, isIsoDate } from './util.js';
 import { notifyRegions } from './push.js';
 import { mirrorToTelegram } from './telegram.js';
 import { publishMqtt, topicFor } from './mqtt.js';
+import { ROLES, rank, isAdmin, isSiteAdmin, teamTree, scopedCoverage, scopedServices, publicService, coverageByService } from './scope.js';
 
-const ROLES = ['poster', 'admin'];
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,38}$/;
 
 export default {
@@ -49,36 +50,11 @@ export default {
     }
   },
 
-  /**
-   * Hourly tidying. A retained MQTT payload outlives the cut it describes, so
-   * a device booting next week would otherwise be told about last Tuesday.
-   * Clear the topics whose window has passed, and only those — republishing
-   * live ones would wake every connected device for no news.
-   */
+  /** Hourly: forget retained MQTT state whose window has passed. */
   async scheduled(event, env, ctx) {
     ctx.waitUntil(clearExpiredRetained(env));
   },
 };
-
-async function clearExpiredRetained(env) {
-  if (!env.MQTT_URL) return;
-  const { results: stale } = await env.DB.prepare(
-    `SELECT id, slug FROM regions
-     WHERE mqtt_retained_until IS NOT NULL
-       AND datetime(mqtt_retained_until) < datetime('now')`,
-  ).all();
-  if (stale.length === 0) return;
-
-  // An empty retained payload is how MQTT says "forget what I told you".
-  const res = await publishMqtt(env, stale.map((r) => [topicFor(r.slug), '']));
-  if (!res.ok) return;                       // leave the marks; try again next hour
-
-  for (const r of stale) {
-    await env.DB.prepare('UPDATE regions SET mqtt_retained_until = NULL WHERE id = ?1')
-      .bind(r.id).run();
-  }
-  console.log(`cleared retained state for ${stale.length} area(s)`);
-}
 
 async function route(request, env, ctx, url) {
   const db = env.DB;
@@ -87,27 +63,50 @@ async function route(request, env, ctx, url) {
 
   // ───────────────────────── public ─────────────────────────
 
-  if (method === 'GET' && path === '/api/regions') {
+  // One discovery call: every service that is switched on, and the areas that
+  // actually have a crew behind them. An area nobody covers is not offered.
+  if (method === 'GET' && path === '/api/services') {
     const { results } = await db.prepare(
-      'SELECT slug, name_en, name_hi FROM regions ORDER BY slug',
+      `SELECT DISTINCT s.id, s.slug, s.name_en, s.name_hi, s.icon, s.accent,
+              s.kinds, s.reasons, s.sort,
+              r.slug AS region_slug, r.name_en AS region_en, r.name_hi AS region_hi
+       FROM services s
+       JOIN teams t        ON t.service_id = s.id
+       JOIN team_regions tr ON tr.team_id = t.id
+       JOIN regions r      ON r.id = tr.region_id
+       WHERE s.enabled = 1
+       ORDER BY s.sort, s.slug, r.slug`,
     ).all();
-    return json({ regions: results }, 200, { 'cache-control': 'public, max-age=300' });
+    const byService = new Map();
+    for (const row of results) {
+      if (!byService.has(row.slug)) byService.set(row.slug, { ...publicService(row), regions: [] });
+      byService.get(row.slug).regions.push({
+        slug: row.region_slug, name_en: row.region_en, name_hi: row.region_hi,
+      });
+    }
+    return json({ services: [...byService.values()] }, 200, { 'cache-control': 'public, max-age=300' });
   }
 
-  const nextCuts = path.match(/^\/api\/regions\/([a-z0-9-]+)\/next-cuts$/);
-  if (method === 'GET' && nextCuts) {
+  const upcoming = path.match(/^\/api\/services\/([a-z0-9-]+)\/areas\/([a-z0-9-]+)\/notices$/);
+  if (method === 'GET' && upcoming) {
+    const svc = await db.prepare('SELECT id, slug, name_en, name_hi, icon FROM services WHERE slug = ?1 AND enabled = 1')
+      .bind(upcoming[1]).first();
+    if (!svc) return notFound();
+    // Slugs repeat across services, so the area must be looked up within one.
     const region = await db.prepare(
-      'SELECT id, slug, name_en, name_hi FROM regions WHERE slug = ?1',
-    ).bind(nextCuts[1]).first();
+      'SELECT id, slug, name_en, name_hi FROM regions WHERE service_id = ?1 AND slug = ?2',
+    ).bind(svc.id, upcoming[2]).first();
     if (!region) return notFound();
     const { results } = await db.prepare(
-      `SELECT id, kind, win_from, win_to, reason_en, reason_hi, status, posted_at
+      `SELECT id, kind, win_from, win_to, reason_en, reason_hi, status, posted_at, batch_id
        FROM notices
-       WHERE region_id = ?1 AND status = 'scheduled' AND datetime(win_to) > datetime('now')
+       WHERE service_id = ?1 AND region_id = ?2 AND status = 'scheduled'
+         AND datetime(win_to) > datetime('now')
        ORDER BY datetime(win_from) LIMIT 20`,
-    ).bind(region.id).all();
+    ).bind(svc.id, region.id).all();
     return json({
-      region: { slug: region.slug, name_en: region.name_en, name_hi: region.name_hi },
+      service: { slug: svc.slug, name_en: svc.name_en, name_hi: svc.name_hi, icon: svc.icon },
+      area: { slug: region.slug, name_en: region.name_en, name_hi: region.name_hi },
       notices: results.map(publicNotice),
     }, 200, { 'cache-control': 'public, max-age=60' });
   }
@@ -118,15 +117,20 @@ async function route(request, env, ctx, url) {
 
   // ───────────────────────── invites ─────────────────────────
 
-  // What a tapped link shows before anyone commits to anything.
   if (method === 'GET' && path === '/api/invites/preview') {
     const invite = await liveInvite(db, url.searchParams.get('t') || '');
     if (!invite) return json({ valid: false }, 404);
     const team = await db.prepare('SELECT name FROM teams WHERE id = ?1').bind(invite.team_id).first();
-    const out = { valid: true, team: team?.name ?? '', role: invite.role, expires_at: invite.expires_at };
+    const svc = invite.service_id
+      ? await db.prepare('SELECT name_en, name_hi, icon FROM services WHERE id = ?1').bind(invite.service_id).first()
+      : null;
+    const out = {
+      valid: true, team: team?.name ?? '', role: invite.role, expires_at: invite.expires_at,
+      service: svc ? { name_en: svc.name_en, name_hi: svc.name_hi, icon: svc.icon } : null,
+    };
     if (invite.move_poster_id) {
       const who = await activePoster(db, invite.move_poster_id);
-      if (!who) return json({ valid: false }, 404);   // they were removed after minting
+      if (!who) return json({ valid: false }, 404);
       out.move = true;
       out.name = who.name;
     }
@@ -138,17 +142,14 @@ async function route(request, env, ctx, url) {
     const invite = await liveInvite(db, body?.token || '');
     if (!invite) return json({ error: 'invite_invalid' }, 401);
 
-    // A move: re-issue an existing person's token onto this phone. The old
-    // phone's token stops working the moment this row is updated.
     if (invite.move_poster_id) {
       const who = await activePoster(db, invite.move_poster_id);
       if (!who) return json({ error: 'invite_invalid' }, 401);
       const moved = randomToken();
       await db.prepare('UPDATE posters SET token_hash = ?2 WHERE id = ?1')
         .bind(who.id, await sha256hex(moved)).run();
-      await db.prepare(
-        "UPDATE invites SET used_at = datetime('now'), used_by = ?2 WHERE id = ?1",
-      ).bind(invite.id, who.id).run();
+      await db.prepare("UPDATE invites SET used_at = datetime('now'), used_by = ?2 WHERE id = ?1")
+        .bind(invite.id, who.id).run();
       const t = await db.prepare('SELECT name FROM teams WHERE id = ?1').bind(who.team_id).first();
       return json({ token: moved, team: t?.name ?? '', role: who.role, name: who.name, moved: true });
     }
@@ -159,97 +160,95 @@ async function route(request, env, ctx, url) {
 
     const token = randomToken();
     await db.prepare(
-      'INSERT INTO posters (team_id, name, phone, role, token_hash) VALUES (?1, ?2, ?3, ?4, ?5)',
-    ).bind(invite.team_id, name, phone, invite.role, await sha256hex(token)).run();
+      'INSERT INTO posters (team_id, service_id, name, phone, role, token_hash) VALUES (?1, ?2, ?3, ?4, ?5, ?6)',
+    ).bind(invite.team_id, invite.service_id, name, phone, invite.role, await sha256hex(token)).run();
     const poster = await db.prepare('SELECT id FROM posters WHERE token_hash = ?1')
       .bind(await sha256hex(token)).first();
-
-    // Burn it. An invite dies on use, not merely on expiry.
-    await db.prepare(
-      "UPDATE invites SET used_at = datetime('now'), used_by = ?2 WHERE id = ?1",
-    ).bind(invite.id, poster.id).run();
+    await db.prepare("UPDATE invites SET used_at = datetime('now'), used_by = ?2 WHERE id = ?1")
+      .bind(invite.id, poster.id).run();
 
     const team = await db.prepare('SELECT name FROM teams WHERE id = ?1').bind(invite.team_id).first();
     return json({ token, team: team?.name ?? '', role: invite.role, name });
   }
 
-  // ───────────────────────── poster ─────────────────────────
+  // ───────────────────────── identity ─────────────────────────
 
   const me = await authPoster(db, request);
 
   if (method === 'GET' && path === '/api/me') {
     if (!me) return unauthorized();
+    const coverage = coverageByService(await scopedCoverage(db, me.team_id));
     return json({
       name: me.name,
       role: me.role,
-      team_id: me.team_id,
-      regions: publicRegions(await scopedRegions(db, me.team_id)),
+      team: me.team_name,
+      // Contextual visibility: a lineman is handed one service and their own
+      // areas; a site admin gets everything. Same query, different position.
+      services: coverage,
+      can: {
+        invite: isAdmin(me),
+        manage_people: isAdmin(me),
+        manage_coverage: isAdmin(me),
+        manage_areas: isAdmin(me),          // within the services they reach
+        manage_services: isSiteAdmin(me),   // creating a service is still SQL
+      },
     });
   }
 
-  if (method === 'GET' && path === '/api/team/regions') {
-    if (!me) return unauthorized();
-    return json({ poster: me.name, role: me.role, regions: publicRegions(await scopedRegions(db, me.team_id)) });
-  }
-
-  // "I have a new phone." Anyone may move themselves — no admin errand, and no
-  // password to recover, because there was never a password. Deliberately
-  // short-lived: you are doing this with both phones in front of you.
-  if (method === 'POST' && path === '/api/me/move') {
-    if (!me) return unauthorized();
-    // Only one move link alive at a time, so an abandoned one can't linger.
-    await db.prepare(
-      `UPDATE invites SET revoked_at = datetime('now')
-       WHERE move_poster_id = ?1 AND used_at IS NULL AND revoked_at IS NULL`,
-    ).bind(me.id).run();
-    const token = randomToken();
-    await db.prepare(
-      `INSERT INTO invites (token_hash, team_id, role, note, created_by, expires_at, move_poster_id)
-       VALUES (?1, ?2, ?3, ?4, ?5, datetime('now', '+30 minutes'), ?5)`,
-    ).bind(await sha256hex(token), me.team_id, me.role, `move: ${me.name}`, me.id).run();
-    const row = await db.prepare('SELECT expires_at FROM invites WHERE token_hash = ?1')
-      .bind(await sha256hex(token)).first();
-    return json({ url: `${publicOrigin(url)}/join#t=${token}`, expires_at: row.expires_at }, 201);
-  }
+  // ───────────────────────── posting ─────────────────────────
 
   if (method === 'POST' && path === '/api/notices') {
     if (!me) return unauthorized();
     const body = await request.json().catch(() => null);
     if (!body) return badRequest('invalid json');
-    const { from, to, kind = 'cut' } = body;
+
+    const coverage = coverageByService(await scopedCoverage(db, me.team_id));
+    // The single-service convenience default applies only when the client did
+    // not name one. Naming a service you cannot reach must be refused, never
+    // quietly redirected to the one you can — that would file a notice against
+    // the wrong utility.
+    const wantSlug = String(body.service || '').trim();
+    const svc = wantSlug
+      ? coverage.find((s) => s.slug === wantSlug)
+      : (coverage.length === 1 ? coverage[0] : null);
+    if (!svc) return wantSlug ? forbidden('not your service') : badRequest('pick a service');
+
+    const kinds = svc.kinds.map((k) => k.key);
+    const kind = String(body.kind || kinds[0] || 'cut');
+    if (!kinds.includes(kind)) return badRequest('bad kind for this service');
+
+    const { from, to } = body;
     const reason_en = String(body.reason_en ?? '').trim().slice(0, 200);
     const reason_hi = String(body.reason_hi ?? '').trim().slice(0, 200);
-    if (!['cut', 'advisory', 'restored'].includes(kind)) return badRequest('bad kind');
     if (!isIsoDate(from) || !isIsoDate(to) || Date.parse(from) >= Date.parse(to)) {
       return badRequest('bad window');
     }
     if (!reason_en && !reason_hi) return badRequest('a reason, in either language');
 
-    // One area or several. `region` (singular) still works for anything older.
     const wanted = Array.isArray(body.regions) && body.regions.length
       ? [...new Set(body.regions.map(String))]
       : (body.region ? [String(body.region)] : []);
     if (wanted.length === 0) return badRequest('pick at least one area');
     if (wanted.length > 25) return badRequest('too many areas at once');
 
-    const mine = await scopedRegions(db, me.team_id);
-    const targets = wanted.map((slug) => mine.find((r) => r.slug === slug));
+    const targets = wanted.map((slug) => svc.regions.find((r) => r.slug === slug));
     if (targets.some((r) => !r)) return forbidden('not your area');
 
-    // One row per area, tied together so they can be cancelled as one act.
+    const svcRow = await db.prepare('SELECT id FROM services WHERE slug = ?1').bind(svc.slug).first();
+    const regionIds = await slugsToRegionIds(db, svcRow.id, targets.map((r) => r.slug));
+
     const batch = randomId('bat');
     const ids = [];
     for (const region of targets) {
       const id = randomId('ntc');
       ids.push(id);
       await db.prepare(
-        `INSERT INTO notices (id, region_id, kind, win_from, win_to, reason_en, reason_hi, posted_by, batch_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
-      ).bind(id, region.id, kind, from, to, reason_en, reason_hi, me.id, batch).run();
+        `INSERT INTO notices (id, service_id, region_id, kind, win_from, win_to, reason_en, reason_hi, posted_by, batch_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
+      ).bind(id, svcRow.id, regionIds.get(region.slug), kind, from, to, reason_en, reason_hi, me.id, batch).run();
     }
-    // Notify across all of them at once: somebody subscribed to two of these
-    // areas is still one person, and still gets one buzz.
-    ctx.waitUntil(fanOut(db, env, targets, {
+
+    ctx.waitUntil(fanOut(db, env, svc, svcRow.id, targets.map((r) => ({ ...r, id: regionIds.get(r.slug) })), {
       kind, status: 'scheduled', from, to, reason_en, reason_hi,
     }));
     return json({ ids, batch_id: batch, areas: targets.length, status: 'scheduled' }, 201);
@@ -259,97 +258,134 @@ async function route(request, env, ctx, url) {
   if (method === 'POST' && cancel) {
     if (!me) return unauthorized();
     const notice = await db.prepare(
-      "SELECT id, region_id, batch_id FROM notices WHERE id = ?1 AND status = 'scheduled'",
+      `SELECT n.id, n.service_id, n.region_id, n.batch_id, n.kind, n.win_from, n.win_to,
+              n.reason_en, n.reason_hi, s.slug AS service_slug
+       FROM notices n JOIN services s ON s.id = n.service_id
+       WHERE n.id = ?1 AND n.status = 'scheduled'`,
     ).bind(cancel[1]).first();
     if (!notice) return notFound();
-    const mine = await scopedRegions(db, me.team_id);
-    if (!mine.some((r) => r.id === notice.region_id)) return forbidden('not your area');
 
-    // Cancelling one area of a multi-area notice cancels the whole thing —
-    // it was posted as one act, so it is untrue to un-post only part of it.
+    const coverage = coverageByService(await scopedCoverage(db, me.team_id));
+    const svc = coverage.find((s) => s.slug === notice.service_slug);
+    if (!svc) return forbidden('not your service');
+    const mineIds = await slugsToRegionIds(db, notice.service_id, svc.regions.map((r) => r.slug));
+    const mineSet = new Set([...mineIds.values()]);
+    if (!mineSet.has(notice.region_id)) return forbidden('not your area');
+
     const siblings = notice.batch_id
-      ? (await db.prepare(
-          "SELECT id, region_id FROM notices WHERE batch_id = ?1 AND status = 'scheduled'",
-        ).bind(notice.batch_id).all()).results
-      : [notice];
-    const reachable = siblings.filter((n) => mine.some((r) => r.id === n.region_id));
+      ? (await db.prepare("SELECT id, region_id FROM notices WHERE batch_id = ?1 AND status = 'scheduled'")
+          .bind(notice.batch_id).all()).results
+      : [{ id: notice.id, region_id: notice.region_id }];
+    const reachable = siblings.filter((n) => mineSet.has(n.region_id));
     for (const n of reachable) {
       await db.prepare("UPDATE notices SET status = 'cancelled' WHERE id = ?1").bind(n.id).run();
     }
-    const full = await db.prepare(
-      'SELECT kind, win_from, win_to, reason_en, reason_hi FROM notices WHERE id = ?1',
-    ).bind(notice.id).first();
-    const cancelledRegions = reachable.map((n) => mine.find((r) => r.id === n.region_id));
-    ctx.waitUntil(fanOut(db, env, cancelledRegions, {
-      kind: full.kind, status: 'cancelled',
-      from: full.win_from, to: full.win_to,
-      reason_en: full.reason_en, reason_hi: full.reason_hi,
-    }));
+
+    const bySlug = new Map(svc.regions.map((r) => [mineIds.get(r.slug), r]));
+    ctx.waitUntil(fanOut(db, env, svc, notice.service_id,
+      reachable.map((n) => ({ ...bySlug.get(n.region_id), id: n.region_id })), {
+        kind: notice.kind, status: 'cancelled',
+        from: notice.win_from, to: notice.win_to,
+        reason_en: notice.reason_en, reason_hi: notice.reason_hi,
+      }));
     return json({ ids: reachable.map((n) => n.id), status: 'cancelled' });
   }
 
   if (method === 'GET' && path === '/api/team/notices') {
     if (!me) return unauthorized();
-    const regions = await scopedRegions(db, me.team_id);
-    if (regions.length === 0) return json({ notices: [] });
-    const marks = regions.map((_, i) => `?${i + 1}`).join(',');
+    const teams = await teamTree(db, me.team_id);
+    const marks = teams.map((_, i) => `?${i + 1}`).join(',');
     const { results } = await db.prepare(
-      `SELECT n.id, n.kind, n.win_from, n.win_to, n.reason_en, n.reason_hi, n.status, n.posted_at,
-              n.batch_id,
+      `SELECT n.id, n.kind, n.win_from, n.win_to, n.reason_en, n.reason_hi, n.status,
+              n.posted_at, n.batch_id,
+              s.slug AS service_slug, s.name_en AS service_en, s.name_hi AS service_hi, s.icon,
               r.slug AS region_slug, r.name_en AS region_en, r.name_hi AS region_hi,
               p.name AS poster_name
        FROM notices n
-       JOIN regions r ON r.id = n.region_id
+       JOIN services s ON s.id = n.service_id
+       JOIN regions r  ON r.id = n.region_id
        LEFT JOIN posters p ON p.id = n.posted_by
-       WHERE n.region_id IN (${marks}) AND datetime(n.win_to) > datetime('now', '-1 day')
-       ORDER BY datetime(n.win_from) DESC LIMIT 50`,
-    ).bind(...regions.map((r) => r.id)).all();
+       WHERE n.region_id IN (
+               SELECT tr.region_id FROM team_regions tr WHERE tr.team_id IN (${marks})
+             )
+         AND n.service_id IN (
+               SELECT t.service_id FROM teams t WHERE t.id IN (${marks}) AND t.service_id IS NOT NULL
+             )
+         AND datetime(n.win_to) > datetime('now', '-1 day')
+       ORDER BY datetime(n.win_from) DESC LIMIT 60`,
+    ).bind(...teams, ...teams).all();
     return json({
       notices: results.map((n) => ({
         ...publicNotice(n),
-        batch_id: n.batch_id,
         by: n.poster_name,
-        region: { slug: n.region_slug, name_en: n.region_en, name_hi: n.region_hi },
+        service: { slug: n.service_slug, name_en: n.service_en, name_hi: n.service_hi, icon: n.icon },
+        area: { slug: n.region_slug, name_en: n.region_en, name_hi: n.region_hi },
       })),
     });
+  }
+
+  if (method === 'POST' && path === '/api/me/move') {
+    if (!me) return unauthorized();
+    await db.prepare(
+      `UPDATE invites SET revoked_at = datetime('now')
+       WHERE move_poster_id = ?1 AND used_at IS NULL AND revoked_at IS NULL`,
+    ).bind(me.id).run();
+    const token = randomToken();
+    await db.prepare(
+      `INSERT INTO invites (token_hash, team_id, service_id, role, note, created_by, expires_at, move_poster_id)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now', '+30 minutes'), ?6)`,
+    ).bind(await sha256hex(token), me.team_id, me.service_id, me.role, `move: ${me.name}`, me.id).run();
+    const row = await db.prepare('SELECT expires_at FROM invites WHERE token_hash = ?1')
+      .bind(await sha256hex(token)).first();
+    return json({ url: `${publicOrigin(url)}/join#t=${token}`, expires_at: row.expires_at }, 201);
   }
 
   // ───────────────────────── admin ─────────────────────────
 
   if (method === 'POST' && path === '/api/invites') {
     if (!me) return unauthorized();
-    if (me.role !== 'admin') return forbidden('admin only');
+    if (!isAdmin(me)) return forbidden('admin only');
     const body = await request.json().catch(() => null);
     const role = ROLES.includes(body?.role) ? body.role : 'poster';
+    // Nobody may mint authority above their own.
+    if (rank(role) > rank(me.role)) return forbidden('above your own role');
     const note = (body?.note || '').trim().slice(0, 80) || null;
-    const hours = Math.min(Math.max(parseInt(body?.hours, 10) || 48, 1), 336);   // 1h … 14d
+    const hours = Math.min(Math.max(parseInt(body?.hours, 10) || 48, 1), 336);
+
+    // Where does the invitee land? Their own team by default; a site admin
+    // inviting a service admin puts them at that service's root.
+    let teamId = me.team_id;
+    let serviceId = me.service_id;
+    if (body?.team) {
+      const t = await db.prepare('SELECT id, service_id FROM teams WHERE id = ?1').bind(body.team).first();
+      const allowed = await teamTree(db, me.team_id);
+      if (!t || !allowed.includes(t.id)) return forbidden('not your team');
+      teamId = t.id; serviceId = t.service_id;
+    }
     const token = randomToken();
     await db.prepare(
-      `INSERT INTO invites (token_hash, team_id, role, note, created_by, expires_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, datetime('now', ?6))`,
-    ).bind(await sha256hex(token), me.team_id, role, note, me.id, `+${hours} hours`).run();
+      `INSERT INTO invites (token_hash, team_id, service_id, role, note, created_by, expires_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now', ?7))`,
+    ).bind(await sha256hex(token), teamId, serviceId, role, note, me.id, `+${hours} hours`).run();
     const row = await db.prepare('SELECT id, expires_at FROM invites WHERE token_hash = ?1')
       .bind(await sha256hex(token)).first();
-    return json({
-      id: row.id,
-      url: `${publicOrigin(url)}/join#t=${token}`,
-      role,
-      note,
-      expires_at: row.expires_at,
-    }, 201);
+    return json({ id: row.id, url: `${publicOrigin(url)}/join#t=${token}`, role, note, expires_at: row.expires_at }, 201);
   }
 
   if (method === 'GET' && path === '/api/invites') {
     if (!me) return unauthorized();
-    if (me.role !== 'admin') return forbidden('admin only');
+    if (!isAdmin(me)) return forbidden('admin only');
+    const teams = await teamTree(db, me.team_id);
+    const marks = teams.map((_, i) => `?${i + 1}`).join(',');
     const { results } = await db.prepare(
       `SELECT i.id, i.role, i.note, i.created_at, i.expires_at, i.used_at, i.revoked_at,
               p.name AS used_by_name
        FROM invites i
        LEFT JOIN posters p ON p.id = i.used_by
-       WHERE i.team_id = ?1 AND datetime(i.created_at) > datetime('now', '-30 days')
+       WHERE i.team_id IN (${marks}) AND i.move_poster_id IS NULL
+         AND datetime(i.created_at) > datetime('now', '-30 days')
        ORDER BY i.created_at DESC LIMIT 40`,
-    ).bind(me.team_id).all();
+    ).bind(...teams).all();
     const now = Date.now();
     return json({
       invites: results.map((i) => ({
@@ -365,78 +401,151 @@ async function route(request, env, ctx, url) {
   const revokeInvite = path.match(/^\/api\/invites\/(\d+)\/revoke$/);
   if (method === 'POST' && revokeInvite) {
     if (!me) return unauthorized();
-    if (me.role !== 'admin') return forbidden('admin only');
+    if (!isAdmin(me)) return forbidden('admin only');
+    const teams = await teamTree(db, me.team_id);
+    const marks = teams.map((_, i) => `?${i + 2}`).join(',');
     const res = await db.prepare(
       `UPDATE invites SET revoked_at = datetime('now')
-       WHERE id = ?1 AND team_id = ?2 AND used_at IS NULL AND revoked_at IS NULL`,
-    ).bind(revokeInvite[1], me.team_id).run();
+       WHERE id = ?1 AND team_id IN (${marks}) AND used_at IS NULL AND revoked_at IS NULL`,
+    ).bind(revokeInvite[1], ...teams).run();
     if (!res.meta.changes) return notFound();
     return json({ id: Number(revokeInvite[1]), state: 'revoked' });
   }
 
   if (method === 'GET' && path === '/api/team/members') {
     if (!me) return unauthorized();
-    if (me.role !== 'admin') return forbidden('admin only');
+    if (!isAdmin(me)) return forbidden('admin only');
+    const teams = await teamTree(db, me.team_id);
+    const marks = teams.map((_, i) => `?${i + 1}`).join(',');
     const { results } = await db.prepare(
-      `SELECT id, name, phone, role, created_at, revoked_at
-       FROM posters WHERE team_id = ?1 ORDER BY revoked_at IS NOT NULL, created_at`,
-    ).bind(me.team_id).all();
-    return json({ members: results.map((m) => ({ ...m, is_you: m.id === me.id })) });
+      `SELECT p.id, p.name, p.phone, p.role, p.created_at, p.revoked_at,
+              t.name AS team_name, s.name_en AS service_en, s.name_hi AS service_hi, s.icon
+       FROM posters p
+       JOIN teams t ON t.id = p.team_id
+       LEFT JOIN services s ON s.id = p.service_id
+       WHERE p.team_id IN (${marks})
+       ORDER BY p.revoked_at IS NOT NULL, p.created_at`,
+    ).bind(...teams).all();
+    return json({
+      members: results.map((m) => ({
+        ...m,
+        is_you: m.id === me.id,
+        can_remove: m.id !== me.id && !m.revoked_at && rank(m.role) <= rank(me.role),
+      })),
+    });
   }
 
   const revokeMember = path.match(/^\/api\/team\/members\/(\d+)\/revoke$/);
   if (method === 'POST' && revokeMember) {
     if (!me) return unauthorized();
-    if (me.role !== 'admin') return forbidden('admin only');
+    if (!isAdmin(me)) return forbidden('admin only');
     const id = Number(revokeMember[1]);
     if (id === me.id) return badRequest('you cannot revoke yourself');
-    // Don't strand the team: refuse to remove the last working admin.
+    const teams = await teamTree(db, me.team_id);
     const target = await db.prepare(
-      'SELECT id, role FROM posters WHERE id = ?1 AND team_id = ?2 AND revoked_at IS NULL',
-    ).bind(id, me.team_id).first();
-    if (!target) return notFound();
-    if (target.role === 'admin') {
+      'SELECT id, role, team_id FROM posters WHERE id = ?1 AND revoked_at IS NULL',
+    ).bind(id).first();
+    if (!target || !teams.includes(target.team_id)) return notFound();
+    if (rank(target.role) > rank(me.role)) return forbidden('above your own role');
+    if (target.role === 'site_admin') {
       const { count } = await db.prepare(
-        "SELECT COUNT(*) AS count FROM posters WHERE team_id = ?1 AND role = 'admin' AND revoked_at IS NULL",
-      ).bind(me.team_id).first();
-      if (count <= 1) return badRequest('that is the last admin');
+        "SELECT COUNT(*) AS count FROM posters WHERE role = 'site_admin' AND revoked_at IS NULL",
+      ).first();
+      if (count <= 1) return badRequest('that is the last site admin');
     }
     await db.prepare("UPDATE posters SET revoked_at = datetime('now') WHERE id = ?1").bind(id).run();
     return json({ id, state: 'revoked' });
   }
 
-  if (method === 'POST' && path === '/api/regions') {
+  // Areas belong to a service, so a service admin owns their own. A site admin
+  // reaches every service by sitting above them in the tree, not by a special
+  // case here.
+  const addArea = path.match(/^\/api\/services\/([a-z0-9-]+)\/areas$/);
+  if (method === 'POST' && addArea) {
     if (!me) return unauthorized();
-    if (me.role !== 'admin') return forbidden('admin only');
+    if (!isAdmin(me)) return forbidden('admin only');
+    const svcRow = await myService(db, me, addArea[1]);
+    if (!svcRow) return forbidden('not your service');
     const body = await request.json().catch(() => null);
     const slug = (body?.slug || '').trim().toLowerCase();
     const name_en = (body?.name_en || '').trim().slice(0, 60);
     const name_hi = (body?.name_hi || '').trim().slice(0, 60);
     if (!SLUG_RE.test(slug)) return badRequest('slug: a-z, 0-9 and hyphens');
     if (!name_en || !name_hi) return badRequest('both names are required');
-    const clash = await db.prepare('SELECT id FROM regions WHERE slug = ?1').bind(slug).first();
-    if (clash) return badRequest('that slug already exists');
+    // Slugs are unique across the whole site so a public URL never needs the
+    // service to disambiguate. Say so plainly rather than failing cryptically.
+    if (await db.prepare('SELECT id FROM regions WHERE slug = ?1').bind(slug).first()) {
+      return badRequest('that short id is already taken — try another');
+    }
+    // regions.team_id survives from the pre-services schema as NOT NULL and
+    // cannot be dropped without rebuilding the table, so it is still written.
+    // Coverage — the thing that actually matters — goes in team_regions, and
+    // the adding admin's own team gets it so the area is usable immediately
+    // rather than invisible until somebody remembers to toggle it.
     await db.prepare(
-      'INSERT INTO regions (slug, name_en, name_hi, team_id) VALUES (?1, ?2, ?3, ?4)',
-    ).bind(slug, name_en, name_hi, me.team_id).run();
+      'INSERT INTO regions (service_id, team_id, slug, name_en, name_hi) VALUES (?1, ?2, ?3, ?4, ?5)',
+    ).bind(svcRow.id, me.team_id, slug, name_en, name_hi).run();
+    const added = await db.prepare('SELECT id FROM regions WHERE slug = ?1').bind(slug).first();
+    await db.prepare('INSERT OR IGNORE INTO team_regions (team_id, region_id) VALUES (?1, ?2)')
+      .bind(me.team_id, added.id).run();
     return json({ slug, name_en, name_hi }, 201);
   }
 
-  // Display names only. The slug is load-bearing — it is in the public API URL
-  // and in every subscriber's saved selection — so it is deliberately immutable.
-  const rename = path.match(/^\/api\/regions\/([a-z0-9-]+)\/rename$/);
-  if (method === 'POST' && rename) {
+  const renameArea = path.match(/^\/api\/services\/([a-z0-9-]+)\/areas\/([a-z0-9-]+)\/rename$/);
+  if (method === 'POST' && renameArea) {
     if (!me) return unauthorized();
-    if (me.role !== 'admin') return forbidden('admin only');
+    if (!isAdmin(me)) return forbidden('admin only');
+    const svcRow = await myService(db, me, renameArea[1]);
+    if (!svcRow) return forbidden('not your service');
     const body = await request.json().catch(() => null);
     const name_en = (body?.name_en || '').trim().slice(0, 60);
     const name_hi = (body?.name_hi || '').trim().slice(0, 60);
     if (!name_en || !name_hi) return badRequest('both names are required');
-    const region = (await scopedRegions(db, me.team_id)).find((r) => r.slug === rename[1]);
-    if (!region) return forbidden('not your area');
-    await db.prepare('UPDATE regions SET name_en = ?2, name_hi = ?3 WHERE id = ?1')
-      .bind(region.id, name_en, name_hi).run();
-    return json({ slug: region.slug, name_en, name_hi });
+    const res = await db.prepare(
+      'UPDATE regions SET name_en = ?3, name_hi = ?4 WHERE service_id = ?1 AND slug = ?2',
+    ).bind(svcRow.id, renameArea[2], name_en, name_hi).run();
+    if (!res.meta.changes) return notFound();
+    return json({ slug: renameArea[2], name_en, name_hi });
+  }
+
+  // Which areas this admin's crew covers. Service-scoped, so a water admin
+  // cannot quietly claim an area on the electricity service's behalf.
+  const coverage = path.match(/^\/api\/services\/([a-z0-9-]+)\/coverage$/);
+  if (method === 'POST' && coverage) {
+    if (!me) return unauthorized();
+    if (!isAdmin(me)) return forbidden('admin only');
+    const body = await request.json().catch(() => null);
+    const on = Boolean(body?.on);
+    const svcRowCov = await myService(db, me, coverage[1]);
+    if (!svcRowCov) return forbidden('not your service');
+    const region = await db.prepare('SELECT id FROM regions WHERE service_id = ?1 AND slug = ?2')
+      .bind(svcRowCov.id, String(body?.area || '')).first();
+    if (!region) return notFound();
+    // Attach to the team the admin sits on, or the named team inside their tree.
+    const teams = await teamTree(db, me.team_id);
+    const teamId = body?.team && teams.includes(Number(body.team)) ? Number(body.team) : me.team_id;
+    if (on) {
+      await db.prepare('INSERT OR IGNORE INTO team_regions (team_id, region_id) VALUES (?1, ?2)')
+        .bind(teamId, region.id).run();
+    } else {
+      await db.prepare('DELETE FROM team_regions WHERE team_id = ?1 AND region_id = ?2')
+        .bind(teamId, region.id).run();
+    }
+    return json({ area: body.area, on });
+  }
+
+  // Every area this service defines — the admin's list, which is a superset of
+  // what any one crew covers.
+  const listAreas = path.match(/^\/api\/services\/([a-z0-9-]+)\/areas$/);
+  if (method === 'GET' && listAreas) {
+    if (!me) return unauthorized();
+    if (!isAdmin(me)) return forbidden('admin only');
+    const svcRow = await myService(db, me, listAreas[1]);
+    if (!svcRow) return forbidden('not your service');
+    const { results } = await db.prepare(
+      'SELECT slug, name_en, name_hi FROM regions WHERE service_id = ?1 ORDER BY slug',
+    ).bind(svcRow.id).all();
+    return json({ areas: results });
   }
 
   // ───────────────────────── subscribers ─────────────────────────
@@ -444,21 +553,23 @@ async function route(request, env, ctx, url) {
   if (method === 'POST' && path === '/api/subscriptions') {
     const body = await request.json().catch(() => null);
     const endpoint = body?.endpoint;
-    const regions = Array.isArray(body?.regions) ? body.regions.slice(0, 20) : [];
     const lang = body?.lang === 'hi' ? 'hi' : 'en';
+    const topics = Array.isArray(body?.topics) ? body.topics.slice(0, 60) : [];
     if (typeof endpoint !== 'string' || !endpoint.startsWith('https://')) return badRequest('bad endpoint');
-    if (regions.length === 0) return badRequest('pick at least one region');
+    if (topics.length === 0) return badRequest('pick at least one area');
     await db.prepare(
       `INSERT INTO subscriptions (endpoint, p256dh, auth, lang) VALUES (?1, ?2, ?3, ?4)
        ON CONFLICT(endpoint) DO UPDATE SET p256dh = ?2, auth = ?3, lang = ?4`,
     ).bind(endpoint, body?.keys?.p256dh ?? null, body?.keys?.auth ?? null, lang).run();
     const sub = await db.prepare('SELECT id FROM subscriptions WHERE endpoint = ?1').bind(endpoint).first();
     await db.prepare('DELETE FROM subscription_regions WHERE subscription_id = ?1').bind(sub.id).run();
-    for (const slug of regions) {
+    for (const tpc of topics) {
       await db.prepare(
-        `INSERT OR IGNORE INTO subscription_regions (subscription_id, region_id)
-         SELECT ?1, id FROM regions WHERE slug = ?2`,
-      ).bind(sub.id, String(slug)).run();
+        `INSERT OR IGNORE INTO subscription_regions (subscription_id, region_id, service_id)
+         SELECT ?1, r.id, s.id FROM services s
+         JOIN regions r ON r.service_id = s.id AND r.slug = ?2
+         WHERE s.slug = ?3 AND s.enabled = 1`,
+      ).bind(sub.id, String(tpc?.area ?? ''), String(tpc?.service ?? '')).run();
     }
     return json({ ok: true });
   }
@@ -473,40 +584,43 @@ async function route(request, env, ctx, url) {
   if (method === 'POST' && path === '/api/subscriptions/pending') {
     const body = await request.json().catch(() => null);
     if (typeof body?.endpoint !== 'string') return badRequest('bad endpoint');
-    const sub = await db.prepare(
-      'SELECT id, lang FROM subscriptions WHERE endpoint = ?1',
-    ).bind(body.endpoint).first();
+    const sub = await db.prepare('SELECT id, lang FROM subscriptions WHERE endpoint = ?1')
+      .bind(body.endpoint).first();
     if (!sub) return notFound();
     const { results } = await db.prepare(
-      `SELECT n.id, n.kind, n.win_from, n.win_to, n.reason_en, n.reason_hi, n.status, n.posted_at,
-              n.batch_id, r.name_en AS region_en, r.name_hi AS region_hi
+      `SELECT n.id, n.kind, n.win_from, n.win_to, n.reason_en, n.reason_hi, n.status,
+              n.posted_at, n.batch_id,
+              s.name_en AS service_en, s.name_hi AS service_hi, s.icon, s.kinds,
+              r.name_en AS region_en, r.name_hi AS region_hi
        FROM notices n
-       JOIN regions r ON r.id = n.region_id
-       JOIN subscription_regions sr ON sr.region_id = n.region_id
+       JOIN services s ON s.id = n.service_id
+       JOIN regions r  ON r.id = n.region_id
+       JOIN subscription_regions sr
+         ON sr.region_id = n.region_id AND sr.service_id = n.service_id
        WHERE sr.subscription_id = ?1
          AND datetime(n.posted_at) > datetime('now', '-2 days')
          AND datetime(n.win_to) > datetime('now')
        ORDER BY datetime(n.posted_at) DESC LIMIT 12`,
     ).bind(sub.id).all();
-    // One posting act = one notification, even when it covered several of the
-    // areas this person follows. Collapse the batch and name all of them.
+
     const seen = new Map();
     for (const n of results) {
       const key = n.batch_id || n.id;
-      if (!seen.has(key)) {
-        seen.set(key, { ...publicNotice(n), en: [n.region_en], hi: [n.region_hi] });
-      } else {
-        const g = seen.get(key);
-        g.en.push(n.region_en);
-        g.hi.push(n.region_hi);
-      }
+      if (!seen.has(key)) seen.set(key, { ...publicNotice(n), row: n, en: [n.region_en], hi: [n.region_hi] });
+      else { seen.get(key).en.push(n.region_en); seen.get(key).hi.push(n.region_hi); }
     }
     return json({
       lang: sub.lang,
-      notices: [...seen.values()].map(({ en, hi, ...n }) => ({
-        ...n,
-        region: { name_en: en.join(' · '), name_hi: hi.join(' · ') },
-      })),
+      notices: [...seen.values()].map(({ en, hi, row, ...n }) => {
+        const kinds = (() => { try { return JSON.parse(row.kinds || '[]'); } catch { return []; } })();
+        const k = kinds.find((x) => x.key === n.kind);
+        return {
+          ...n,
+          service: { name_en: row.service_en, name_hi: row.service_hi, icon: row.icon },
+          kind_label: { en: k?.en ?? n.kind, hi: k?.hi ?? n.kind },
+          area: { name_en: en.join(' · '), name_hi: hi.join(' · ') },
+        };
+      }),
     });
   }
 
@@ -515,60 +629,9 @@ async function route(request, env, ctx, url) {
 
 // ───────────────────────── helpers ─────────────────────────
 
-/**
- * Everything that happens after a notice changes: web push to people, a
- * Telegram line for the channel, retained MQTT for the machines. All three run
- * in ctx.waitUntil and each swallows its own failures — a sulking broker or a
- * revoked bot token must never make posting a notice fail, because the notice
- * is the thing that actually matters.
- */
-async function fanOut(db, env, regions, notice) {
-  const ids = regions.map((r) => r.id);
-  const payload = {
-    ...notice,
-    areas_en: regions.map((r) => r.name_en).join(', '),
-    areas_hi: regions.map((r) => r.name_hi).join(', '),
-  };
-  const state = JSON.stringify({
-    status: notice.status,
-    kind: notice.kind,
-    from: notice.from,
-    to: notice.to,
-    reason: { en: notice.reason_en, hi: notice.reason_hi },
-    areas: regions.map((r) => r.slug),
-    updated_at: new Date().toISOString(),
-  });
-
-  await Promise.allSettled([
-    notifyRegions(db, env, ids),
-    mirrorToTelegram(env, payload),
-    // Retained, per area — a device that boots later still learns the state.
-    publishMqtt(env, regions.map((r) => [topicFor(r.slug), state])),
-  ]);
-
-  // Remember when this retained payload stops being true, so the scheduled
-  // job can clear it rather than leaving stale weather on the topic.
-  if (env.MQTT_URL) {
-    for (const r of regions) {
-      await db.prepare('UPDATE regions SET mqtt_retained_until = ?2 WHERE id = ?1')
-        .bind(r.id, notice.to).run();
-    }
-  }
-}
-
-/**
- * The origin to put inside an invite link. Never emit http:// for a real host —
- * the link gets pasted into WhatsApp, and a scheme downgrade there is a
- * downgrade for everyone who taps it. Localhost stays http for dev.
- */
 function publicOrigin(url) {
   const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
   return local ? url.origin : `https://${url.host}`;
-}
-
-/** Regions as the client needs them — internal ids stay server-side. */
-function publicRegions(regions) {
-  return regions.map(({ slug, name_en, name_hi }) => ({ slug, name_en, name_hi }));
 }
 
 function publicNotice(n) {
@@ -580,7 +643,25 @@ function publicNotice(n) {
     reason: { en: n.reason_en, hi: n.reason_hi },
     status: n.status,
     posted_at: n.posted_at,
+    batch_id: n.batch_id ?? null,
   };
+}
+
+/** Area slugs are unique per service, so a lookup without one is ambiguous. */
+async function slugsToRegionIds(db, serviceId, slugs) {
+  if (slugs.length === 0) return new Map();
+  const marks = slugs.map((_, i) => `?${i + 2}`).join(',');
+  const { results } = await db.prepare(
+    `SELECT id, slug FROM regions WHERE service_id = ?1 AND slug IN (${marks})`,
+  ).bind(serviceId, ...slugs).all();
+  return new Map(results.map((r) => [r.slug, r.id]));
+}
+
+/** The service row, if this person actually reaches it. */
+async function myService(db, me, slug) {
+  const mine = await scopedServices(db, me.team_id);
+  if (!mine.some((x) => x.slug === slug)) return null;
+  return db.prepare('SELECT id, slug FROM services WHERE slug = ?1').bind(slug).first();
 }
 
 async function authPoster(db, request) {
@@ -588,39 +669,81 @@ async function authPoster(db, request) {
   const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (!token) return null;
   return db.prepare(
-    'SELECT id, team_id, name, role FROM posters WHERE token_hash = ?1 AND revoked_at IS NULL',
+    `SELECT p.id, p.team_id, p.service_id, p.name, p.role, t.name AS team_name
+     FROM posters p JOIN teams t ON t.id = p.team_id
+     WHERE p.token_hash = ?1 AND p.revoked_at IS NULL`,
   ).bind(await sha256hex(token)).first();
 }
 
-/** An invite that is unused, unrevoked, and not yet expired. Anything else is nothing. */
 async function liveInvite(db, token) {
   if (!token || typeof token !== 'string') return null;
   return db.prepare(
-    `SELECT id, team_id, role, expires_at, move_poster_id FROM invites
-     WHERE token_hash = ?1
-       AND used_at IS NULL AND revoked_at IS NULL
+    `SELECT id, team_id, service_id, role, expires_at, move_poster_id FROM invites
+     WHERE token_hash = ?1 AND used_at IS NULL AND revoked_at IS NULL
        AND datetime(expires_at) > datetime('now')`,
   ).bind(await sha256hex(token)).first();
 }
 
-/** A poster who still exists and has not been removed. */
-async function activePoster(db, id) {
-  return db.prepare(
-    'SELECT id, team_id, name, role FROM posters WHERE id = ?1 AND revoked_at IS NULL',
-  ).bind(id).first();
+/**
+ * Everything that happens after a notice changes: push to people, a line in
+ * the Telegram channel, retained MQTT for the machines. Each swallows its own
+ * failures — the notice is the thing that matters.
+ */
+async function fanOut(db, env, svc, serviceId, regions, notice) {
+  const ids = regions.map((r) => r.id).filter(Boolean);
+  const kindLabel = svc.kinds.find((k) => k.key === notice.kind);
+
+  const payload = {
+    ...notice,
+    service_en: svc.name_en, service_hi: svc.name_hi, icon: svc.icon,
+    kind_en: kindLabel?.en ?? notice.kind, kind_hi: kindLabel?.hi ?? notice.kind,
+    areas_en: regions.map((r) => r.name_en).join(', '),
+    areas_hi: regions.map((r) => r.name_hi).join(', '),
+  };
+  const state = JSON.stringify({
+    service: svc.slug,
+    status: notice.status,
+    kind: notice.kind,
+    from: notice.from,
+    to: notice.to,
+    reason: { en: notice.reason_en, hi: notice.reason_hi },
+    areas: regions.map((r) => r.slug),
+    updated_at: new Date().toISOString(),
+  });
+
+  await Promise.allSettled([
+    notifyRegions(db, env, serviceId, ids),
+    mirrorToTelegram(env, payload),
+    publishMqtt(env, regions.map((r) => [topicFor(svc.slug, r.slug), state])),
+  ]);
+
+  if (env.MQTT_URL) {
+    for (const id of ids) {
+      await db.prepare(
+        `INSERT INTO mqtt_retained (service_id, region_id, until) VALUES (?1, ?2, ?3)
+         ON CONFLICT(service_id, region_id) DO UPDATE SET until = ?3`,
+      ).bind(serviceId, id, notice.to).run();
+    }
+  }
 }
 
-/** A team's own regions plus every descendant team's. */
-async function scopedRegions(db, teamId) {
-  const { results } = await db.prepare(
-    `WITH RECURSIVE tree(id) AS (
-       SELECT ?1
-       UNION ALL
-       SELECT t.id FROM teams t JOIN tree ON t.parent_id = tree.id
-     )
-     SELECT r.id, r.slug, r.name_en, r.name_hi
-     FROM regions r WHERE r.team_id IN (SELECT id FROM tree)
-     ORDER BY r.slug`,
-  ).bind(teamId).all();
-  return results;
+async function clearExpiredRetained(env) {
+  if (!env.MQTT_URL) return;
+  const { results: stale } = await env.DB.prepare(
+    `SELECT m.service_id, m.region_id, s.slug AS service_slug, r.slug AS region_slug
+     FROM mqtt_retained m
+     JOIN services s ON s.id = m.service_id
+     JOIN regions r  ON r.id = m.region_id
+     WHERE datetime(m.until) < datetime('now')`,
+  ).all();
+  if (stale.length === 0) return;
+
+  const res = await publishMqtt(env, stale.map((r) => [topicFor(r.service_slug, r.region_slug), '']));
+  if (!res.ok) return;                       // leave the marks; try again next hour
+
+  for (const r of stale) {
+    await env.DB.prepare('DELETE FROM mqtt_retained WHERE service_id = ?1 AND region_id = ?2')
+      .bind(r.service_id, r.region_id).run();
+  }
+  console.log(`cleared retained state for ${stale.length} topic(s)`);
 }

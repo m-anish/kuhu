@@ -11,7 +11,7 @@ Live: **https://kuhuapp.starstucklab.com**
 | Path | Who | What |
 |---|---|---|
 | `/` | Households | Pick areas, allow notifications, see what's coming. |
-| `/post` | The team | Post notices; admins also manage people and areas. |
+| `/post` | A crew | Post notices; admins also manage people, coverage and areas. |
 | `/join` | Anyone invited | Where an invite link lands. Used once, then dead. |
 
 ## How a poster joins
@@ -36,10 +36,10 @@ tokens. The database holds nothing replayable.
 ## One notice, several areas
 
 An outage rarely respects a boundary, so areas are multi-select. Posting writes
-**one row per area**, sharing a `batch_id` — every consumer downstream
-(`next-cuts`, subscriptions, push) still deals with one notice in one region and
-needed no changes. The batch exists so the app can show the four rows as the one
-act they were, and so cancelling any of them cancels all of them.
+**one row per area**, sharing a `batch_id` — every consumer downstream (the
+public notices endpoint, subscriptions, push) still deals with one notice in one
+area of one service. The batch exists so the app can show the four rows as the
+one act they were, and so cancelling any of them cancels all of them.
 
 Push is deduplicated across the whole batch: somebody who follows three of the
 four affected areas is still one person, gets one buzz, and sees all three of
@@ -76,9 +76,11 @@ same words the app shows, so there is only one version of the truth.
 
 **MQTT**: set `MQTT_URL` (e.g. `mqtts://broker.example:8883`) plus
 `MQTT_USERNAME` / `MQTT_PASSWORD` as secrets. Each affected area gets a
-**retained** JSON payload on `kuhu/<area>/cuts`, so a device that boots at
-midday still learns about the afternoon's cut instead of waiting for the next
-posting. The client is ~60 lines of MQTT 3.1.1 over a raw Worker TCP socket —
+**retained** JSON payload on `kuhu/<service>/<area>/notices`, so a device that
+boots at midday still learns about the afternoon's cut instead of waiting for
+the next posting. The service sits in the path so a device can subscribe to
+exactly what it cares about (`kuhu/electricity/+/notices`), and it says
+"notices" rather than "cuts" because a cut is an electricity word. The client is ~60 lines of MQTT 3.1.1 over a raw Worker TCP socket —
 CONNECT, CONNACK, PUBLISH, DISCONNECT, QoS 0. Packet encoding lives in
 `src/mqtt-packets.js`, separate from the socket code so it can be tested
 outside the Workers runtime:
@@ -94,15 +96,28 @@ would rather be told than asked.
 
 | Role | Can |
 |---|---|
-| `poster` | Post and cancel notices for the team's areas. |
-| `admin` | Everything a poster can, plus: mint and cancel invite links, see and remove team members, add areas, rename areas. |
+| `poster` | Post and cancel notices for their crew's areas, on their crew's service. |
+| `service_admin` | That, plus: invite and remove people, and choose which areas the crew covers — within their own service. |
+| `site_admin` | That, plus: every service, and the shared geography (adding and renaming areas). |
 
-Two invariants are enforced server-side, not just hidden in the UI: an admin
-**cannot revoke themselves**, and the **last remaining admin cannot be
-removed**. Between them a team can't lock itself out.
+Scope and powers are separate ideas. **Powers** come from the role; **scope**
+comes from where you sit in the team tree:
+
+```
+kuhu                        ← site admins      sees every service
+  └── Electricity           ← service admins   sees one service
+        └── Local line crew ← posters          sees their own areas
+```
+
+One recursive query answers "what may this person see?" at every level, so a
+site admin is not a special case anywhere — they simply sit at the root. Three
+invariants are enforced server-side, not merely hidden in the UI: nobody may
+revoke themselves, nobody may grant or revoke authority above their own, and
+the last site admin cannot be removed.
 
 Removing someone sets `revoked_at` rather than deleting the row — their token
 stops working on the next request, while "who posted this notice" survives.
+
 
 ## The first admin
 
@@ -110,8 +125,10 @@ There is nobody to invite the first admin, so they are minted from the command
 line:
 
 ```bash
-node tools/mint-invite.mjs --admin --hours 168 --note "who it's for"
-node tools/mint-invite.mjs --admin --local          # against local dev
+node tools/mint-invite.mjs --site-admin --hours 168 --note "who it's for"
+node tools/mint-invite.mjs --site-admin --local            # against local dev
+node tools/mint-invite.mjs --service-admin --team 901      # an electricity admin
+node tools/mint-invite.mjs --team 1 --note "Ramesh"        # a poster on a crew
 ```
 
 It prints the link once. After that, admins invite everyone else from the app
@@ -128,55 +145,64 @@ inside a third-party push service.
 
 ## API
 
-Public, cacheable, CORS-open:
+Public, cacheable, CORS-open. One discovery call, then one call per thing you
+care about:
 
 ```
-GET  /api/regions                     every region
-GET  /api/regions/{slug}/next-cuts    upcoming notices for one region
-GET  /api/vapid-key                   push public key
+GET  /api/services                                  every enabled service, with its areas
+GET  /api/services/{service}/areas/{area}/notices   what's coming
+GET  /api/vapid-key                                 push public key
 ```
 
-Joining (public, but useless without a live invite token):
+`/api/services` also carries each service's `kinds` and `reasons`, which is how
+the app knows to say "power cut" for one service and "tanker coming" for
+another without shipping either word.
+
+Joining (public, useless without a live invite token):
 
 ```
-GET  /api/invites/preview?t=…         {valid, team, role} — what the link offers
-POST /api/invites/redeem              {token, name, phone} → {token, team, role}
+GET  /api/invites/preview?t=…      {valid, team, role, service}
+POST /api/invites/redeem           {token, name, phone} → {token, team, role}
 ```
 
 Poster, `Authorization: Bearer <token>`:
 
 ```
-GET  /api/me                          {name, role, regions}
-POST /api/notices                     {regions[], kind, from, to, reason_en, reason_hi}
-POST /api/notices/{id}/cancel         cancels the whole batch it belongs to
-POST /api/me/move                     → a 30-minute link to move to a new phone
-GET  /api/team/regions                what this poster may post to
-GET  /api/team/notices                the team's recent notices
+GET  /api/me                       {name, role, team, services[], can{}}
+POST /api/notices                  {service, regions[], kind, from, to, reason_en, reason_hi}
+POST /api/notices/{id}/cancel      cancels the whole batch it belongs to
+GET  /api/team/notices             recent notices across everything you reach
+POST /api/me/move                  → a 30-minute link to move to another phone
 ```
 
-Admin, same header, `role=admin` (everything below 403s for a plain poster):
+Admin (`service_admin` within its service; `site_admin` everywhere):
 
 ```
-POST /api/invites                     {role, hours, note} → {url, expires_at}
-GET  /api/invites                     open / used / expired / revoked
+POST /api/invites                  {role, hours, note, team}
+GET  /api/invites                  open / used / expired / revoked
 POST /api/invites/{id}/revoke
 GET  /api/team/members
 POST /api/team/members/{id}/revoke
-POST /api/regions                     {slug, name_en, name_hi}
-POST /api/regions/{slug}/rename       {name_en, name_hi} — names only, never the slug
+GET  /api/areas                    every area that exists
+POST /api/services/{service}/coverage   {area, on, team}  — what this crew answers for
+```
+
+Site admin only — geography is shared by every service, so only the top may
+edit it:
+
+```
+POST /api/areas                    {slug, name_en, name_hi}
+POST /api/areas/{slug}/rename      {name_en, name_hi}  — names only, never the slug
 ```
 
 Subscriber:
 
 ```
-POST   /api/subscriptions             {endpoint, keys, regions[], lang}
-DELETE /api/subscriptions             {endpoint}
-POST   /api/subscriptions/pending     {endpoint} → what to show
+POST   /api/subscriptions          {endpoint, keys, lang, topics:[{service, area}]}
+DELETE /api/subscriptions          {endpoint}
+POST   /api/subscriptions/pending  {endpoint} → what to show
 ```
 
-A gadget that wants to know about power cuts polls `next-cuts` and needs
-nothing else — no key, no account. MQTT publishing is not built yet; it is the
-next thing.
 
 ## Running it
 
@@ -232,11 +258,31 @@ One label deep is deliberate: free-plan Universal SSL covers
 `*.starstucklab.com` but not `app.kuhu.starstucklab.com`. A second-level
 subdomain would need Advanced Certificate Manager.
 
-## Regions and teams
+## Services, geography and teams
 
-Regions are the first-class object: a notice belongs to a region, a
-subscription is a set of regions. Teams are scoped to regions and nest via
-`teams.parent_id` — a parent team may post to every region in its subtree, a
-child only to its own. Both are enforced by a recursive CTE in `teamRegions()`
-and verified in practice. Today there is one team and three wards; growing to
-a district with area crews under it is inserts, not a migration.
+**A service is a row.** `services` holds its slug, display names, icon, accent,
+and — as JSON — the `kinds` of notice it can carry and its `reasons` presets.
+Adding water is an `INSERT` plus a crew; no code changes and nothing deploys.
+Nothing under `src/` mentions electricity.
+
+```sql
+INSERT INTO services (slug, name_en, name_hi, icon, accent, kinds, reasons, sort)
+VALUES ('water', 'Water', 'पानी', '💧', '#6ba3c4',
+  '[{"key":"supply_cut","en":"No supply","hi":"पानी नहीं आएगा"},
+    {"key":"tanker","en":"Tanker coming","hi":"टैंकर आएगा"}]',
+  '[{"en":"Pipeline repair","hi":"पाइपलाइन की मरम्मत"}]', 2);
+```
+
+Then give it a root team under `kuhu`, a crew under that, and some coverage.
+
+**Geography is shared.** `regions` has no owner — Naddi is Naddi whether the
+notice is about power or water. Which areas a crew answers for lives in
+`team_regions`, so two services can cover the same village without arguing.
+
+**Teams nest, and that tree is the hierarchy.** See Roles above. A crew's
+reach is its own coverage plus every crew beneath it, which is why the same
+query serves a lineman and a site admin.
+
+**The slug is permanent**, for both services and areas: it appears in public
+API URLs and in every subscriber's saved selection. Display names change
+freely; slugs never do.

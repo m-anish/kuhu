@@ -1,6 +1,6 @@
 // The join face. An invite link lands here, once.
 
-import { STRINGS, pickLang, setLang, parseInviteToken, isStandalone, isIOS, isInAppBrowser } from '/i18n.js';
+import { STRINGS, pickLang, setLang, parseInviteToken, isStandalone, isIOS, isInAppBrowser, initTheme } from '/i18n.js';
 
 let lang = pickLang();
 const $ = (s) => document.querySelector(s);
@@ -138,7 +138,7 @@ async function join() {
 }
 
 for (const b of document.querySelectorAll('.lang button')) {
-  b.addEventListener('click', () => { lang = b.dataset.lang; paintStrings(); });
+  b.addEventListener('click', () => { lang = b.dataset.lang; paintStrings(); theme?.repaint(); });
 }
 $('#join').addEventListener('click', join);
 $('#name').addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); });
@@ -147,5 +147,6 @@ $('#paste').addEventListener('keydown', (e) => { if (e.key === 'Enter') goPasted
 $('#ios-copy').addEventListener('click', copyLink);
 $('#ios-go').addEventListener('click', () => $('#ios-warn').classList.add('hidden'));
 
+const theme = initTheme(t);
 paintStrings();
 check();

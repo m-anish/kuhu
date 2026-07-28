@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>kuhu — join your team</title>
-<meta name="theme-color" content="#0c0f0c">
+<meta name="theme-color" content="#0c0f0c" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f6f5ef" media="(prefers-color-scheme: light)">
 <meta name="robots" content="noindex">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="/icon.svg">
@@ -18,9 +19,12 @@
     <img src="/icon.svg" alt="" aria-hidden="true">
     <b>kuhu</b>
     <span class="beta">beta</span>
-    <div class="lang" role="group" aria-label="Language">
-      <button type="button" data-lang="en" aria-pressed="true">English</button>
-      <button type="button" data-lang="hi" aria-pressed="false">हिंदी</button>
+    <div class="mast-controls">
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-lang="en" aria-pressed="true">English</button>
+        <button type="button" data-lang="hi" aria-pressed="false">हिंदी</button>
+      </div>
+      <button id="theme" class="theme-btn" type="button" aria-label="Theme"><span class="theme-icon" aria-hidden="true">◐</span></button>
     </div>
   </header>
 

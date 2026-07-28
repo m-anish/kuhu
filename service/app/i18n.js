@@ -85,6 +85,10 @@ export const STRINGS = {
     inapp_dismiss: 'Continue here anyway',
     move_title_alt: 'New phone, or the Home Screen app?',
     move_help_alt: 'Make a link here and paste it into the other one. On iPhone the Home Screen app signs in separately from Safari, so it needs its own link.',
+    // theme
+    theme_auto: 'Theme: follows your phone',
+    theme_light: 'Theme: light',
+    theme_dark: 'Theme: dark',
     // admin structure
     people: 'People',
     this_phone: 'This phone',
@@ -222,6 +226,9 @@ export const STRINGS = {
     inapp_dismiss: 'यहीं आगे बढ़ें',
     move_title_alt: 'नया फ़ोन, या होम स्क्रीन ऐप?',
     move_help_alt: 'यहाँ लिंक बनाइए और दूसरे में पेस्ट कीजिए। iPhone पर होम स्क्रीन ऐप अलग से साइन इन होता है, इसलिए उसे अपना लिंक चाहिए।',
+    theme_auto: 'रंग: फ़ोन के अनुसार',
+    theme_light: 'रंग: हल्का',
+    theme_dark: 'रंग: गहरा',
     people: 'लोग',
     this_phone: 'यह फ़ोन',
     other_ways: 'जानने के और तरीके',
@@ -322,6 +329,72 @@ export function isIOS() {
 export function isInAppBrowser() {
   const ua = navigator.userAgent;
   return /\bwv\b/.test(ua) || /FBAN|FBAV|Instagram|Line\//.test(ua);
+}
+
+/* ── theme ──────────────────────────────────────────────────────────────
+   Three states, not two: "auto" follows the phone, which is what most people
+   want and what makes the app match everything else on their screen at dusk.
+   An explicit choice is remembered and overrides the system. */
+
+const THEMES = ['auto', 'light', 'dark'];
+
+export function pickTheme() {
+  const saved = localStorage.getItem('kuhu.theme');
+  return THEMES.includes(saved) ? saved : 'auto';
+}
+
+/** Apply a theme and remember it. `auto` removes the attribute so the CSS
+ *  media query takes over again. */
+export function applyTheme(theme) {
+  const t = THEMES.includes(theme) ? theme : 'auto';
+  localStorage.setItem('kuhu.theme', t);
+  if (t === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', t);
+  paintThemeColor();
+  return t;
+}
+
+export function nextTheme(current) {
+  return THEMES[(THEMES.indexOf(current) + 1) % THEMES.length];
+}
+
+/** Keep the browser chrome (status bar, address bar) in step with the page. */
+function paintThemeColor() {
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+  let meta = document.querySelector('meta[name="theme-color"]:not([media])');
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.name = 'theme-color';
+    document.head.append(meta);
+  }
+  if (bg) meta.content = bg;
+}
+
+/** Wire the cycling button present in every masthead. */
+export function initTheme(t) {
+  let theme = applyTheme(pickTheme());
+  const btn = document.querySelector('#theme');
+  if (!btn) return;
+
+  const paint = () => {
+    const icon = { auto: '◐', light: '☀', dark: '☾' }[theme];
+    btn.querySelector('.theme-icon').textContent = icon;
+    const label = t(`theme_${theme}`);
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('title', label);
+  };
+
+  btn.addEventListener('click', () => {
+    theme = applyTheme(nextTheme(theme));
+    paint();
+  });
+
+  // Following the system means noticing when the system changes its mind.
+  window.matchMedia('(prefers-color-scheme: light)')
+    .addEventListener('change', () => { if (theme === 'auto') paintThemeColor(); });
+
+  paint();
+  return { repaint: paint };
 }
 
 export function pickLang() {

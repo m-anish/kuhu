@@ -1,6 +1,6 @@
 // The listening face. Pick areas, allow one quiet notification, see what's next.
 
-import { STRINGS, pickLang, setLang, fmtWindow } from '/i18n.js';
+import { STRINGS, pickLang, setLang, fmtWindow, initTheme } from '/i18n.js';
 
 let lang = pickLang();
 let regions = [];
@@ -184,12 +184,14 @@ for (const b of document.querySelectorAll('.lang button')) {
     paintRegions();
     paintUpcoming();
     paintNotifyButton();
+    theme?.repaint();
     if (currentSubscription) syncSubscription(currentSubscription);
   });
 }
 
 $('#notify').addEventListener('click', () => (currentSubscription ? disable() : enable()));
 
+const theme = initTheme(t);
 paintStrings();
 paintNotifyButton();
 loadRegions();

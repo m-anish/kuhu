@@ -1,7 +1,7 @@
 // The posting face. Invite code once, then: area, kind, window, reason, send.
 // Designed for one thumb, in the rain, in under a minute.
 
-import { STRINGS, REASONS, pickLang, setLang, fmtWindow, localToIso, isoToLocalInput, parseInviteToken } from '/i18n.js';
+import { STRINGS, REASONS, pickLang, setLang, fmtWindow, localToIso, isoToLocalInput, parseInviteToken, initTheme } from '/i18n.js';
 
 let lang = pickLang();
 let token = localStorage.getItem('kuhu.token') || '';
@@ -551,6 +551,7 @@ for (const b of document.querySelectorAll('.lang button')) {
   b.addEventListener('click', () => {
     lang = b.dataset.lang;
     paintStrings();
+    theme?.repaint();
     if (token) {
       paintAreas(); paintKinds(); paintQuick(); paintReasons(); loadMine();
       if (role === 'admin') { paintInviteControls(); loadInvites(); loadMembers(); paintAreasAdmin(); }
@@ -576,6 +577,7 @@ $('#move').addEventListener('click', makeMove);
 $('#move-share').addEventListener('click', shareMove);
 $('#move-copy').addEventListener('click', copyMove);
 
+const theme = initTheme(t);
 paintStrings();
 if (token) {
   showPostView().catch(signOut);

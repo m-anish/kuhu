@@ -97,6 +97,36 @@ checks it two ways: every code round-trips through the vendored decoder, and
 every matrix is compared module-for-module against `qrcode@1.5.4` including
 mask choice.
 
+## Where an invite puts someone
+
+Placement is derived from the **role**, never inherited from whoever is
+inviting. It used to default to the inviter's own team, and a site admin sits
+on the global root — which belongs to no service — so a service admin minted
+that way landed on the root, and their team-tree walk then spanned every
+service. Being one service is what the role *means*, so it has to be true of
+the row rather than of the screen that made it.
+
+| Role | Lands on | Asked for |
+|---|---|---|
+| `site_admin` | the global root | nothing |
+| `service_admin` | that service's root team | **which service**, always |
+| `poster` | a crew covering the chosen areas | which service, **which areas** |
+
+The service is asked even when only one exists. A picker that hides itself when
+there is one option is how the field ends up unset.
+
+For a poster, the chosen areas resolve to a crew via `crewForCoverage`, which
+**reuses** an existing crew with identical coverage rather than minting a team
+per person — two posters given the same patch belong together. Only the
+*topmost* choices are stored: asking for `naddi` and `upper-naddi` stores
+`naddi`, and `scopedCoverage` expands downward, so an area added under it
+tomorrow is covered without re-issuing anything.
+
+Nesting has no depth limit. An admin knows their own patch better than a
+constant does. The guard that is enforced is the one that matters: an area may
+never be moved inside its own descendant, which would cut the branch loose into
+a cycle invisible to every query starting from a root.
+
 ## Areas as a tree
 
 Areas nest: an area with areas inside it *is* a region. One table, one nullable

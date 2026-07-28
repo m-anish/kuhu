@@ -16,7 +16,7 @@ let team = localStorage.getItem('kuhu.team') || '';
 let me = null;                       // { name, role, team, services[], can{} }
 let svc = null;                      // the service currently being posted to
 let sel = { regions: new Set(), kind: null, reason: null };
-let inviteSel = { role: 'poster', hours: 48, team: null };
+let inviteSel = { role: 'poster', hours: 48, service: null, areas: new Set() };
 let teams = [];
 let lastInviteUrl = '';
 let moveUrl = '';
@@ -416,7 +416,7 @@ function paintInviteControls() {
     b.addEventListener('click', () => { inviteSel.role = r; paintInviteControls(); });
     roleBox.append(b);
   }
-  paintInviteTarget();
+  paintInviteScope();
   const hoursBox = $('#invite-hours');
   hoursBox.textContent = '';
   for (const h of [24, 48, 168]) {
@@ -433,38 +433,134 @@ function paintInviteControls() {
 async function loadTeams() {
   const res = await api('/api/teams');
   teams = res.ok ? ((await res.json()).teams || []) : [];
-  paintInviteControls();
 }
 
 /**
- * Where a new person lands. A service admin has one obvious answer and never
- * sees this; a site admin has to say which service — otherwise there is no way
- * to recruit into one.
+ * Where a new person lands, decided by what they will BE.
+ *
+ * The service is always asked and never inherited from whoever is inviting. It
+ * used to default to the inviter's own team, and a site admin sits on the
+ * global root — which belongs to no service — so a service admin made that way
+ * ended up spanning all of them. One service is what the role means.
+ *
+ * A service admin covers their whole service, so they get no area picker. A
+ * poster is narrower than that: they answer for particular areas, and choosing
+ * a region means everything inside it.
  */
-function paintInviteTarget() {
-  const row = $('#invite-target-row');
-  const box = $('#invite-target');
-  // A site admin lands on the global root; everyone else inherits their own.
-  const options = inviteSel.role === 'site_admin'
-    ? []
-    : inviteSel.role === 'service_admin'
-      ? teams.filter((t) => t.service_slug && t.parent_id === 900)   // service roots
-      : teams.filter((t) => t.service_slug && t.parent_id !== 900);  // crews
-  row.classList.toggle('hidden', options.length <= 1);
-  $('#invite-target-label').textContent =
-    t(inviteSel.role === 'service_admin' ? 'invite_which_service' : 'invite_which_crew');
-  if (options.length && !options.some((o) => o.id === inviteSel.team)) inviteSel.team = options[0].id;
-  if (!options.length) inviteSel.team = null;
-  box.textContent = '';
+function paintInviteScope() {
+  const svcRow = $('#invite-service-row');
+  const svcBox = $('#invite-service');
+  const areaRow = $('#invite-areas-row');
+
+  const needsService = inviteSel.role !== 'site_admin';
+  svcRow.classList.toggle('hidden', !needsService);
+  areaRow.classList.toggle('hidden', inviteSel.role !== 'poster');
+  if (!needsService) { inviteSel.service = null; inviteSel.areas.clear(); return; }
+
+  const options = me.services || [];
+  if (!options.some((o) => o.slug === inviteSel.service)) {
+    inviteSel.service = options[0]?.slug ?? null;
+    inviteSel.areas.clear();
+  }
+
+  svcBox.textContent = '';
   for (const o of options) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'chip';
-    b.textContent = `${o.icon || ''} ${o.name}`.trim();
-    b.setAttribute('aria-pressed', String(inviteSel.team === o.id));
-    b.addEventListener('click', () => { inviteSel.team = o.id; paintInviteTarget(); });
-    box.append(b);
+    b.textContent = `${o.icon || ''} ${name(o)}`.trim();
+    b.setAttribute('aria-pressed', String(inviteSel.service === o.slug));
+    b.addEventListener('click', () => {
+      inviteSel.service = o.slug;
+      inviteSel.areas.clear();      // areas belong to one service
+      paintInviteScope();
+    });
+    svcBox.append(b);
   }
+
+  if (inviteSel.role === 'poster') paintInviteAreas();
+}
+
+/** True when this node, or anything above it, has been picked. */
+function areaCovered(node, ancestry) {
+  return ancestry.some((a) => inviteSel.areas.has(a.slug));
+}
+
+function paintInviteAreas() {
+  const box = $('#invite-areas');
+  box.textContent = '';
+  const svc = (me.services || []).find((s) => s.slug === inviteSel.service);
+  if (!svc || !svc.regions.length) {
+    box.innerHTML = `<p class="empty">${escapeHtml(t('no_areas'))}</p>`;
+    return;
+  }
+  paintInviteAreaGroup(box, regionTree(svc.regions), []);
+}
+
+/**
+ * Picking an area takes everything under it. Only the topmost picks are sent —
+ * the server expands downward when it works out coverage, so an area added
+ * under that region tomorrow is included without anyone re-issuing the invite.
+ */
+function paintInviteAreaGroup(box, nodes, ancestry) {
+  const flat = nodes.filter((n) => !n.children.length);
+  if (flat.length) {
+    const chips = document.createElement('div');
+    chips.className = 'chips';
+    for (const n of flat) chips.append(inviteAreaChip(n, ancestry));
+    box.append(chips);
+  }
+
+  for (const node of nodes.filter((n) => n.children.length)) {
+    const covered = areaCovered(node, ancestry);
+    const group = document.createElement('div');
+    group.className = 'rgroup';
+
+    const head = document.createElement('div');
+    head.className = 'rgroup-head';
+    const label = document.createElement('span');
+    label.className = 'rgroup-name';
+    label.textContent = name(node);
+    head.append(label);
+    head.append(inviteAreaChip(node, ancestry, t('whole_region')));
+    group.append(head);
+
+    const inner = document.createElement('div');
+    paintInviteAreaGroup(inner, node.children, [...ancestry, node]);
+    // Taken by the region above, so not separately choosable — the way to get
+    // per-area control is to unpick the region.
+    if (covered || inviteSel.areas.has(node.slug)) {
+      inner.classList.add('covered');
+      for (const b of inner.querySelectorAll('button')) {
+        b.disabled = true;
+        b.setAttribute('aria-pressed', 'true');
+      }
+    }
+    group.append(inner);
+    box.append(group);
+  }
+}
+
+function inviteAreaChip(node, ancestry, label) {
+  const covered = areaCovered(node, ancestry);
+  const on = covered || inviteSel.areas.has(node.slug);
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = label ? 'chip whole' : 'chip';
+  b.textContent = label || name(node);
+  b.setAttribute('aria-pressed', String(on));
+  b.disabled = covered;
+  b.addEventListener('click', () => {
+    if (inviteSel.areas.has(node.slug)) inviteSel.areas.delete(node.slug);
+    else {
+      inviteSel.areas.add(node.slug);
+      // Anything inside is now implied; keeping it listed too would freeze the
+      // choice at today's areas.
+      for (const l of leavesOf(node)) if (l.slug !== node.slug) inviteSel.areas.delete(l.slug);
+    }
+    paintInviteScope();
+  });
+  return b;
 }
 
 /** Draw a link as a QR beside it. Encoding happens here in the page — sending
@@ -484,8 +580,9 @@ async function makeInvite() {
       body: JSON.stringify({
         role: inviteSel.role,
         hours: inviteSel.hours,
+        ...(inviteSel.service ? { service: inviteSel.service } : {}),
+        ...(inviteSel.areas.size ? { areas: [...inviteSel.areas] } : {}),
         note: $('#invite-note').value.trim(),
-        ...(inviteSel.team ? { team: inviteSel.team } : {}),
       }),
     });
     if (!res.ok) return say((await res.json().catch(() => ({}))).error || 'error', 'bad');

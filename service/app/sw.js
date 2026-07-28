@@ -6,7 +6,7 @@
 // a third-party push service, and the payload cannot go stale between send
 // and delivery.
 
-const CACHE = 'kuhu-shell-v24';
+const CACHE = 'kuhu-shell-v26';
 // Canonical paths only — the asset server redirects /index.html and /post.html
 // to these, and a cached redirect is worse than no cache at all.
 // The vendored decoder is deliberately absent: it is ~47 KB gzipped and only

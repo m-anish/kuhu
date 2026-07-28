@@ -132,11 +132,19 @@
             <span id="invite-as-label" data-s="invite_as">Joining as</span>
             <div id="invite-role" class="chips" role="group" aria-labelledby="invite-as-label"></div>
           </div>
-          <!-- Where the invitee lands. Hidden when there is only one place
-               they could go, which is the usual case. -->
-          <div class="field hidden" id="invite-target-row">
-            <span id="invite-target-label" data-s="invite_where">Into which</span>
-            <div id="invite-target" class="chips" role="group" aria-labelledby="invite-target-label"></div>
+          <!-- Which service. Always asked, never inferred: a service admin
+               belongs to exactly one, and guessing it from whoever is inviting
+               is how one ends up attached to none. -->
+          <div class="field hidden" id="invite-service-row">
+            <span id="invite-service-label" data-s="invite_which_service">Which service</span>
+            <div id="invite-service" class="chips" role="group" aria-labelledby="invite-service-label"></div>
+          </div>
+          <!-- Posters only: which areas they answer for. Picking a region takes
+               everything inside it, now and later. -->
+          <div class="field hidden" id="invite-areas-row">
+            <span id="invite-areas-label" data-s="invite_which_areas">Which areas</span>
+            <p class="hint-p" data-s="invite_areas_help"></p>
+            <div id="invite-areas" role="group" aria-labelledby="invite-areas-label"></div>
           </div>
           <div class="field">
             <span id="invite-valid-label" data-s="invite_valid">Link works for</span>

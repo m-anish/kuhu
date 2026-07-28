@@ -169,6 +169,9 @@ export const STRINGS = {
     foot_repo: 'Source on GitHub',
     foot_site: 'About kuhu',
     foot_help: 'Help',
+    // invite scope
+    invite_which_areas: 'Which areas',
+    invite_areas_help: 'What this poster answers for. Pick a region and everything inside it is included — including areas added later. Pick nothing and they get the crew as it stands.',
     // areas as a tree
     whole_region: 'All of it',
     whole_region_note: 'The whole region is selected, so every area inside it is included — including any added later. Tap "All of it" again to pick areas one by one.',
@@ -377,6 +380,9 @@ export const STRINGS = {
     foot_repo: 'GitHub पर कोड',
     foot_site: 'kuhu के बारे में',
     foot_help: 'मदद',
+    // invite scope
+    invite_which_areas: 'कौन-से इलाके',
+    invite_areas_help: 'यह व्यक्ति किन इलाकों के लिए ज़िम्मेदार है। कोई क्षेत्र चुनेंगे तो उसके अंदर सब शामिल — बाद में जोड़े गए इलाके भी। कुछ न चुनें तो उन्हें मौजूदा टीम मिल जाती है।',
     // areas as a tree
     whole_region: 'पूरा इलाका',
     whole_region_note: 'पूरा क्षेत्र चुना हुआ है, इसलिए उसके अंदर के सारे इलाके शामिल हैं — बाद में जोड़े गए भी। एक-एक इलाका चुनना हो तो "पूरा इलाका" दोबारा दबाइए।',

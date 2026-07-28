@@ -1,3 +1,5 @@
+import { randomId } from './util.js';
+
 // Who may see and do what.
 //
 // Scope comes from the team tree; role comes from the poster row. Keeping the
@@ -46,7 +48,16 @@ export async function teamTree(db, teamId) {
 // UNION ALL, and while the write path refuses to create one, a query that
 // cannot hang whatever the data says is worth the rounding error.
 
-export const MAX_REGION_DEPTH = 3;
+// Nesting is not capped. An admin knows their own patch better than a constant
+// does, and a service that wants district > block > village > feeder should be
+// able to say so. What IS enforced is the guard that matters: an area may never
+// be moved inside its own descendant, because that cuts the branch loose into a
+// cycle invisible to every query that starts from a root.
+//
+// This bound is a safety stop for the recursive walks, not a product rule. It
+// exists so a malformed tree cannot hang a request, and is deliberately far
+// past anything a real map would need.
+export const REGION_RECURSION_LIMIT = 64;
 
 /** A node and everything beneath it. */
 export async function regionSubtree(db, regionIds) {
@@ -104,11 +115,11 @@ export async function regionDepth(db, regionId) {
 
 /**
  * How many levels the subtree under a node extends, counting the node as 1.
- * Needed before re-parenting: moving a two-level branch under a node that is
- * already at the limit would push its leaves past the cap.
+ * Only used for reporting now that depth is uncapped, but it is also the thing
+ * that would notice a malformed tree.
  *
- * The depth < 10 guard is belt and braces — UNION ALL is used here because the
- * running depth makes rows distinct, so dedup would not stop a cycle.
+ * UNION ALL is used here because the running depth makes every row distinct, so
+ * dedup would not stop a cycle — hence the explicit limit.
  */
 export async function deepestBelow(db, regionId) {
   const row = await db.prepare(
@@ -117,11 +128,29 @@ export async function deepestBelow(db, regionId) {
        UNION ALL
        SELECT r.id, below.depth + 1
        FROM regions r JOIN below ON r.parent_id = below.id
-       WHERE below.depth < 10
+       WHERE below.depth < ${REGION_RECURSION_LIMIT}
      )
      SELECT MAX(depth) AS d FROM below`,
   ).bind(regionId).first();
   return row?.d ?? 1;
+}
+
+/**
+ * Of the nodes given, those with no selected ancestor also in the set.
+ *
+ * Coverage stores only these. Selecting a region already means everything
+ * inside it — scopedCoverage expands downward — so storing the children too
+ * would freeze the choice, and an area added under that region tomorrow would
+ * not be covered. Same reasoning as a subscription, one level up.
+ */
+export async function topmostRegions(db, rows) {
+  const ids = new Set(rows.map((r) => r.id));
+  const out = [];
+  for (const row of rows) {
+    const above = (await regionAncestors(db, [row.id])).filter((id) => id !== row.id);
+    if (!above.some((id) => ids.has(id))) out.push(row);
+  }
+  return out;
 }
 
 /**
@@ -230,4 +259,56 @@ export function coverageByService(rows) {
     });
   }
   return [...out.values()];
+}
+
+// ───────────────────── team placement ─────────────────────
+
+/** The one team with no parent — kuhu itself, above every service. */
+export async function globalRootTeam(db) {
+  return db.prepare('SELECT id FROM teams WHERE parent_id IS NULL ORDER BY id LIMIT 1').first();
+}
+
+/** A service's own root team, where its admins sit. */
+export async function serviceRootTeam(db, serviceId) {
+  const root = await globalRootTeam(db);
+  if (!root) return null;
+  return db.prepare(
+    'SELECT id FROM teams WHERE service_id = ?1 AND parent_id = ?2 ORDER BY id LIMIT 1',
+  ).bind(serviceId, root.id).first();
+}
+
+/**
+ * A crew covering exactly these areas, reused if one already exists.
+ *
+ * Reuse rather than a crew per invite: two posters given the same patch belong
+ * together, and it keeps the tree from sprouting a team per person. Comparison
+ * is on the stored (topmost) set, so "Kangra" and "Kangra" match even as areas
+ * are added underneath.
+ */
+export async function crewForCoverage(db, rootTeamId, serviceId, regionIds, label) {
+  const want = [...new Set(regionIds)].sort((a, b) => a - b).join(',');
+  const { results: crews } = await db.prepare(
+    'SELECT id FROM teams WHERE parent_id = ?1 AND service_id = ?2',
+  ).bind(rootTeamId, serviceId).all();
+  for (const crew of crews) {
+    const { results } = await db.prepare(
+      'SELECT region_id FROM team_regions WHERE team_id = ?1',
+    ).bind(crew.id).all();
+    if (results.map((r) => r.region_id).sort((a, b) => a - b).join(',') === want) return crew.id;
+  }
+  const id = await newTeam(db, label, rootTeamId, serviceId);
+  for (const rid of regionIds) {
+    await db.prepare('INSERT OR IGNORE INTO team_regions (team_id, region_id) VALUES (?1, ?2)')
+      .bind(id, rid).run();
+  }
+  return id;
+}
+
+export async function newTeam(db, name, parentId, serviceId) {
+  const code = `t-${randomId('x', 10)}`;
+  await db.prepare(
+    'INSERT INTO teams (name, parent_id, service_id, invite_code) VALUES (?1, ?2, ?3, ?4)',
+  ).bind(name, parentId, serviceId, code).run();
+  const row = await db.prepare('SELECT id FROM teams WHERE invite_code = ?1').bind(code).first();
+  return row.id;
 }

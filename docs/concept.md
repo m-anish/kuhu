@@ -116,6 +116,15 @@ was.
   camera is narrow but real: the camera opens Safari, and an iOS Home Screen app
   does not share Safari's storage, so the token would land where the app cannot
   see it. Scanned text is only ever mined for a token, never followed.
+- *A service admin is one service* → enforced by where the row sits, not by the
+  form that created it. Invite placement is derived from the role: a site admin
+  gets the global root, a service admin gets that service's root team, a poster
+  gets a crew. Inheriting the inviter's team is what let a service admin land on
+  the root and see everything.
+- *A poster is narrower than a service* → their invite names areas, and those
+  resolve to a crew covering exactly them. Reach is still read off the team, so
+  the settled rule below holds; what changed is that an invite can now shape the
+  crew rather than only choose one.
 - *Roles* → `poster`, `service_admin`, `site_admin`. Admins invite, remove and
   manage coverage; only a site admin edits geography, because areas are shared
   by every service. Three server-side invariants stop anyone locking anyone

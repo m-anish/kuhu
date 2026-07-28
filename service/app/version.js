@@ -6,4 +6,4 @@
 // guess, and the app says so and offers to fix itself.
 //
 // Bump this whenever app/ or src/ changes in a way a phone should pick up.
-export const APP_VERSION = '2026.07.29-3';
+export const APP_VERSION = '2026.07.29-5';

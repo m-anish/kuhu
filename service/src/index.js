@@ -33,7 +33,7 @@ import { json, badRequest, unauthorized, forbidden, notFound, corsPreflight, ran
 import { notifyRegions } from './push.js';
 import { mirrorToTelegram } from './telegram.js';
 import { publishMqtt, topicFor } from './mqtt.js';
-import { ROLES, rank, isAdmin, isSiteAdmin, teamTree, scopedCoverage, scopedServices, publicService, coverageByService, regionSubtree, regionLeaves, regionDepth, deepestBelow, MAX_REGION_DEPTH } from './scope.js';
+import { ROLES, rank, isAdmin, isSiteAdmin, teamTree, scopedCoverage, scopedServices, publicService, coverageByService, regionSubtree, regionLeaves, regionDepth, deepestBelow, topmostRegions, globalRootTeam, serviceRootTeam, crewForCoverage, newTeam } from './scope.js';
 // Bundled into the Worker at deploy time; the browser reads its own cached
 // copy of the same file, so the two disagreeing proves a stale install.
 import { APP_VERSION } from '../app/version.js';
@@ -412,16 +412,63 @@ async function route(request, env, ctx, url) {
     const note = (body?.note || '').trim().slice(0, 80) || null;
     const hours = Math.min(Math.max(parseInt(body?.hours, 10) || 48, 1), 336);
 
-    // Where does the invitee land? Their own team by default; a site admin
-    // inviting a service admin puts them at that service's root.
-    let teamId = me.team_id;
-    let serviceId = me.service_id;
-    if (body?.team) {
-      const t = await db.prepare('SELECT id, service_id FROM teams WHERE id = ?1').bind(body.team).first();
-      const allowed = await teamTree(db, me.team_id);
-      if (!t || !allowed.includes(t.id)) return forbidden('not your team');
-      teamId = t.id; serviceId = t.service_id;
+    // Where the invitee lands is derived from their ROLE, never inherited from
+    // the inviter. It used to default to me.team_id, and a site admin sits on
+    // the global root — which belongs to no service — so a service admin minted
+    // that way landed on the root and their team-tree walk spanned every
+    // service. A service admin is one service by definition, and that has to be
+    // true of the row, not merely of the screen that created it.
+    let teamId = null;
+    let serviceId = null;
+
+    if (role === 'site_admin') {
+      teamId = (await globalRootTeam(db))?.id ?? null;
+      if (!teamId) return badRequest('no root team');
+    } else {
+      // Everyone else belongs to exactly one service, and the inviter has to
+      // reach it themselves.
+      const svc = body?.service ? await myService(db, me, String(body.service)) : null;
+      if (!svc) return badRequest('pick a service for this person');
+      const root = await serviceRootTeam(db, svc.id);
+      if (!root) return badRequest('that service has no root team');
+      serviceId = svc.id;
+
+      if (role === 'service_admin') {
+        teamId = root.id;
+      } else {
+        // A poster is limited to areas, not just to a service. Selecting a
+        // region means everything inside it, now and later — only the topmost
+        // choices are stored, and scopedCoverage expands downward, so an area
+        // added under that region tomorrow is covered without touching this.
+        const picked = Array.isArray(body?.areas) ? body.areas.map(String) : [];
+        if (picked.length) {
+          const reach = coverageByService(await scopedCoverage(db, me.team_id))
+            .find((c) => c.slug === svc.slug);
+          const mine = new Set((reach?.regions ?? []).map((r) => r.slug));
+          if (picked.some((slug) => !mine.has(slug))) return forbidden('not your area');
+
+          const marks = picked.map((_, i) => `?${i + 2}`).join(',');
+          const { results: rows } = await db.prepare(
+            `SELECT id, slug, name_en, parent_id FROM regions WHERE service_id = ?1 AND slug IN (${marks})`,
+          ).bind(svc.id, ...picked).all();
+          if (rows.length !== new Set(picked).size) return badRequest('no such area');
+
+          const top = await topmostRegions(db, rows);
+          teamId = await crewForCoverage(db, root.id, svc.id, top.map((r) => r.id),
+            top.map((r) => r.name_en).join(' · ').slice(0, 60) || 'Crew');
+        } else {
+          // No areas named: the service's existing crew, as before.
+          teamId = await coveringTeam(db, me, svc.id);
+          if (!teamId) return badRequest('this service has no crew yet');
+        }
+      }
     }
+
+    // Whatever the role decided, it still has to sit inside the inviter's own
+    // branch of the tree.
+    const allowed = await teamTree(db, me.team_id);
+    if (!allowed.includes(teamId)) return forbidden('not your team');
+
     const token = randomToken();
     await db.prepare(
       `INSERT INTO invites (token_hash, team_id, service_id, role, note, created_by, expires_at)
@@ -553,9 +600,6 @@ async function route(request, env, ctx, url) {
         'SELECT id FROM regions WHERE service_id = ?1 AND slug = ?2',
       ).bind(svcRow.id, String(body.parent)).first();
       if (!parent) return badRequest('no such area to nest under');
-      if (await regionDepth(db, parent.id) >= MAX_REGION_DEPTH) {
-        return badRequest(`areas nest ${MAX_REGION_DEPTH} deep at most`);
-      }
       parentId = parent.id;
     }
 
@@ -600,11 +644,6 @@ async function route(request, env, ctx, url) {
     // starts from a root.
     const below = await regionSubtree(db, [child.id]);
     if (below.includes(parent.id)) return badRequest('that would put the area inside itself');
-
-    const deepest = await deepestBelow(db, child.id);
-    if ((await regionDepth(db, parent.id)) + deepest > MAX_REGION_DEPTH) {
-      return badRequest(`areas nest ${MAX_REGION_DEPTH} deep at most`);
-    }
 
     await db.prepare('UPDATE regions SET parent_id = ?2 WHERE id = ?1').bind(child.id, parent.id).run();
     return json({ slug: child.slug, parent: String(body.parent) });
@@ -722,7 +761,11 @@ async function route(request, env, ctx, url) {
     // A service without its teams is unusable and invisible, so don't leave
     // one behind if the second half fails.
     try {
-      const root = await newTeam(db, name_en, 900, svcRow.id);
+      // Looked up, not hardcoded to 900: assuming that id is what left every
+      // site admin pointing at a team that did not exist, and needed 0008.
+      const kuhu = await globalRootTeam(db);
+      if (!kuhu) return badRequest('no root team');
+      const root = await newTeam(db, name_en, kuhu.id, svcRow.id);
       const crew = await newTeam(db, `${name_en} crew`, root, svcRow.id);
 
       // Areas given at creation time. A service with none is a service nobody
@@ -937,14 +980,6 @@ async function coveringTeam(db, me, serviceId) {
 }
 
 /** Create a team, satisfying the vestigial NOT NULL invite_code. */
-async function newTeam(db, name, parentId, serviceId) {
-  const code = `t-${randomId('x', 10)}`;
-  await db.prepare(
-    'INSERT INTO teams (name, parent_id, service_id, invite_code) VALUES (?1, ?2, ?3, ?4)',
-  ).bind(name, parentId, serviceId, code).run();
-  const row = await db.prepare('SELECT id FROM teams WHERE invite_code = ?1').bind(code).first();
-  return row.id;
-}
 
 /** The service row, if this person actually reaches it. */
 async function myService(db, me, slug) {

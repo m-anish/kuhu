@@ -87,6 +87,8 @@ Open **Post a notice**, work down:
 
 **Regions are a shortcut.** *All of it* ticks every area inside — so the notice still says exactly which places it's about.
 
+**You only see your own areas.** Your admin decided them when they invited you. If a region was picked, you get everything in it — including areas added later.
+
 **Presets come with Hindi already written.** Type your own and it goes out only in the language you typed it in.
 
 **Cancelling works.** Recent notices → Cancel. Everyone who was told, gets told.
@@ -112,8 +114,13 @@ You can do everything a poster does, **plus three things**.
 
 Admin → People:
 - Pick what they'll be (poster / service admin)
+- Pick **which service** — always asked, never guessed
+- For a poster, pick **which areas** they answer for
 - Pick how long the link lives
 - **Make invite link** → send on WhatsApp, or let them scan the QR
+
+> **Picking a region picks everything inside it** — now *and* later. Add an area
+> under that region next year and they already cover it. You don't re-invite anyone.
 
 **The link works once, then dies.** It also expires. Their role was set by you before the link existed — nothing for them to choose or get wrong.
 
@@ -150,7 +157,11 @@ Sidhpur                ← a plain area, on its own
 
 There's no separate "region" thing to create. **An area with areas inside it is a region.** That's all.
 
-Three levels deep, maximum.
+Nest as deep as your patch actually goes. There's no limit — district → block
+→ village → feeder is fine if that's how it really works.
+
+The one thing kuhu refuses: moving an area **inside its own descendant**. That
+would tie the branch in a knot and lose it.
 
 **Why it's worth doing:**
 
@@ -162,6 +173,9 @@ Three levels deep, maximum.
 ### What you can't do
 - Create a service
 - Touch another service
+
+**You are one service.** That's what the role means — it's enforced on the
+server, not just hidden in the screen.
 
 Need either? **Ask a site admin.**
 
@@ -187,9 +201,15 @@ It arrives with its own admin group and a first crew, ready to invite into.
 
 ### Inviting across services
 
-When you make an invite you also pick **where it lands** — which service, which crew.
+When you make an invite you pick **which service** it lands in. Always — even
+when there's only one. Guessing it from whoever is inviting is how someone ends
+up attached to no service at all.
 
-A service admin never sees that choice. They only have one answer.
+A service admin sees the same picker with one answer in it.
+
+For a **poster** you also pick their areas, and kuhu puts them in a crew that
+covers exactly that. Two posters given the same patch share a crew rather than
+each getting their own.
 
 ### Things worth not breaking
 
@@ -214,6 +234,7 @@ Version sits bottom-right of every screen. If the server is ahead of your phone,
 | Remove people | — | — | ✅ | ✅ |
 | Add / rename areas | — | — | ✅ | ✅ |
 | Nest areas into regions | — | — | ✅ | ✅ |
+| Limit a poster to areas | — | — | ✅ | ✅ |
 | Create a **service** | — | — | — | ✅ |
 | See **other** services | — | — | — | ✅ |
 

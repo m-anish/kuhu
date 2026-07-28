@@ -20,7 +20,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
 import {
   regionSubtree, regionLeaves, regionAncestors, regionDepth, deepestBelow,
-  scopedCoverage, coverageByService, MAX_REGION_DEPTH,
+  scopedCoverage, coverageByService, scopedServices, topmostRegions,
+  globalRootTeam, serviceRootTeam, crewForCoverage,
 } from '../src/scope.js';
 import { subscribersForRegions } from '../src/push.js';
 
@@ -163,11 +164,84 @@ console.log('\nreads walk down');
 
 console.log('\nguards');
 {
-  // The cycle guard the nest endpoint relies on.
+  // The cycle guard the nest endpoint relies on. Depth itself is uncapped.
   const below = await regionSubtree(DB, [10]);
   check(below.includes(11), 'nesting Kangra under Naddi would be caught as a cycle');
-  check((await regionDepth(DB, 11)) + (await deepestBelow(DB, 10)) > MAX_REGION_DEPTH,
-    'nesting a 2-deep region under a depth-2 area would be caught as too deep');
+  check(!(await regionSubtree(DB, [13])).includes(10), 'an unrelated area is not a false cycle');
+}
+
+console.log('\nnesting is not capped');
+{
+  // district > block > village > feeder, and further. Arbitrary depth is the
+  // point; only cycles are refused.
+  let parent = 13;
+  for (let i = 0; i < 6; i++) {
+    db.exec(`INSERT INTO regions (id, service_id, slug, name_en, name_hi, parent_id)
+             VALUES (${200 + i}, 1, 'deep${i}', 'Deep ${i}', 'गहरा ${i}', ${parent});`);
+    parent = 200 + i;
+  }
+  check((await regionDepth(DB, 205)) === 7, 'a seven-level chain resolves its depth', String(await regionDepth(DB, 205)));
+  check((await deepestBelow(DB, 13)) === 7, 'and reports its height from the top');
+  check(same(await regionLeaves(DB, [13]), [205]), 'the leaf of a deep chain is the bottom one');
+  const anc = await regionAncestors(DB, [205]);
+  check(anc.includes(13) && anc.length === 7, 'delivery still walks the whole chain up');
+  db.exec('DELETE FROM regions WHERE id BETWEEN 200 AND 205;');
+}
+
+console.log('\nonly the topmost picks are stored');
+{
+  const rows = [
+    { id: 10, slug: 'kangra' }, { id: 11, slug: 'naddi' }, { id: 13, slug: 'sidhpur' },
+  ];
+  const top = (await topmostRegions(DB, rows)).map((r) => r.slug);
+  check(same(top, ['kangra', 'sidhpur']),
+    'picking a region and an area inside it stores only the region', top.join(','));
+  check(!top.includes('naddi'),
+    'so an area added under that region later is covered without re-issuing anything');
+}
+
+console.log('\nwhere an invite puts someone');
+{
+  const root = await globalRootTeam(DB);
+  check(root.id === 900, 'the global root is found, not assumed');
+  const svcRoot = await serviceRootTeam(DB, 1);
+  check(svcRoot.id === 901, 'a service root is found for the service');
+
+  // THE BUG: a service admin used to inherit the inviter's team. A site admin
+  // sits on the global root, which belongs to no service — so the service
+  // admin spanned every service. Placement must come from the role.
+  const asRoot = await scopedServices(DB, root.id);
+  const asSvcRoot = await scopedServices(DB, svcRoot.id);
+  check(asRoot.length >= 1, 'the global root does reach services');
+  check(asSvcRoot.length === 1 && asSvcRoot[0].slug === 'electricity',
+    'a service root reaches exactly one service');
+  check(root.id !== svcRoot.id,
+    'so a service admin must never be placed on the global root');
+}
+
+console.log('\na poster is limited to areas, not just a service');
+{
+  // Given "Kangra", the crew covers Kangra and everything inside it.
+  const crew = await crewForCoverage(DB, 901, 1, [10], 'Kangra');
+  const cov = coverageByService(await scopedCoverage(DB, crew));
+  const slugs = cov[0].regions.map((r) => r.slug);
+  check(same(slugs, ['kangra', 'naddi', 'mcleodganj', 'bhagsu']),
+    'a crew given a region covers everything inside it', slugs.join(','));
+  check(!slugs.includes('sidhpur'), 'and nothing outside it');
+
+  // Reuse, so two posters on the same patch share a crew rather than sprouting
+  // one team per person.
+  const again = await crewForCoverage(DB, 901, 1, [10], 'Kangra');
+  check(again === crew, 'the same coverage reuses the same crew');
+  const other = await crewForCoverage(DB, 901, 1, [13], 'Sidhpur');
+  check(other !== crew, 'different coverage gets its own crew');
+
+  // The reason coverage stores the topmost node.
+  db.exec(`INSERT INTO regions (id, service_id, slug, name_en, name_hi, parent_id)
+           VALUES (15, 1, 'dharamkot', 'Dharamkot', 'धरमकोट', 10);`);
+  const later = coverageByService(await scopedCoverage(DB, crew))[0].regions.map((r) => r.slug);
+  check(later.includes('dharamkot'),
+    'an area added under that region reaches the crew without re-inviting anyone');
 }
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall checks passed');

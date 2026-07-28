@@ -134,6 +134,46 @@ district would need search, or a map, or "enter the code on the pole outside
 your house". Closely related to the tree above, and probably the same piece of
 work.
 
+**Areas from a location.** Give kuhu a point and let it work out which area
+that is, instead of asking a person to know. This became natural the moment
+areas stopped being shared: the same latitude and longitude resolves to a
+*different* area in each service, because an electricity feeder and a water
+zone divide the valley differently. A lineman and a water operator standing at
+the same pole are legitimately in different areas, and the model already says
+so.
+
+Two sides, and the second is the real prize:
+
+- **For a poster**, it saves a tap and prevents the wrong-area mistake — useful
+  but small, since a crew knows its own patch.
+- **For a household**, it removes the hardest question the app asks. Nobody
+  knows which feeder they are on. "Use my location" → the right areas
+  pre-selected, across every service at once. That is the single biggest
+  usability win available to a reader who does not read comfortably, and it is
+  worth more than everything else on this list.
+
+Boundaries, in increasing order of cost and correctness:
+
+1. **A representative point per area**, nearest one wins. An hour's work,
+   roughly right in the middle of an area and wrong at every edge.
+2. **A bounding box per area.** Barely better; the edges are still wrong and
+   now they are wrong in rectangles.
+3. **Real polygons** (GeoJSON per area) with point-in-polygon. Correct. Ray
+   casting over a handful of polygons is trivial in the Worker — D1 has no
+   spatial extension and does not need one. The cost is not the code, it is
+   that **nobody has these boundaries drawn**. No utility will hand over
+   feeder maps as GeoJSON; a crew would have to trace them, once, per service.
+
+Start at (1) with an honest label — "we think you're in Naddi, change it if
+not" — and let a service graduate to (3) when someone cares enough to draw it.
+
+**Do not store anyone's location.** kuhu holds no subscriber accounts and that
+should not quietly change here. Resolve the point to a list of areas and forget
+it: no column, no log line, no analytics. If it can be done entirely on-device
+by shipping the boundaries to the client, better still — then the location
+never leaves the phone at all. A notice service that starts quietly collecting
+where people live has become a different and worse thing.
+
 **More than one crew.** The schema already nests teams and the recursive scope
 query is tested, but nothing in the UI creates a team or moves an area between
 teams. That work is real but not hard, and should follow a real second crew
@@ -173,7 +213,8 @@ guessing which.
   notifications is the entire relationship.
 - **Marketing notifications.** Not once, not ever, not for anything. The moment
   kuhu sends something that isn't a notice, everyone turns it off, and rightly.
-- **Ads, tracking, analytics on subscribers.** Nothing about who reads what.
+- **Ads, tracking, analytics on subscribers.** Nothing about who reads what,
+  and — see "Areas from a location" above — nothing about where they are.
 
 ---
 

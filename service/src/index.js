@@ -34,6 +34,9 @@ import { notifyRegions } from './push.js';
 import { mirrorToTelegram } from './telegram.js';
 import { publishMqtt, topicFor } from './mqtt.js';
 import { ROLES, rank, isAdmin, isSiteAdmin, teamTree, scopedCoverage, scopedServices, publicService, coverageByService } from './scope.js';
+// Bundled into the Worker at deploy time; the browser reads its own cached
+// copy of the same file, so the two disagreeing proves a stale install.
+import { APP_VERSION } from '../app/version.js';
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,38}$/;
 
@@ -109,6 +112,12 @@ async function route(request, env, ctx, url) {
       area: { slug: region.slug, name_en: region.name_en, name_hi: region.name_hi },
       notices: results.map(publicNotice),
     }, 200, { 'cache-control': 'public, max-age=60' });
+  }
+
+  // What the server is running. Never cached — the whole point is to catch a
+  // client that is.
+  if (method === 'GET' && path === '/api/version') {
+    return json({ version: APP_VERSION }, 200, { 'cache-control': 'no-store' });
   }
 
   if (method === 'GET' && path === '/api/vapid-key') {

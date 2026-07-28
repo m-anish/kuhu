@@ -5,7 +5,7 @@
 // case today — the service layer is hidden entirely and this looks exactly
 // like a list of areas. Complexity appears only when it has earned its place.
 
-import { STRINGS, pickLang, setLang, fmtWindow, initTheme } from '/i18n.js';
+import { STRINGS, pickLang, setLang, fmtWindow, initTheme, initVersion } from '/i18n.js';
 
 let lang = pickLang();
 let services = [];
@@ -253,6 +253,7 @@ for (const b of document.querySelectorAll('.lang button')) {
 $('#notify').addEventListener('click', () => (currentSubscription ? disable() : enable()));
 
 const theme = initTheme(t);
+initVersion();
 paintStrings();
 paintNotifyButton();
 loadServices();

@@ -6,7 +6,7 @@
 // gets a service switcher, and the kinds and reason presets change with it,
 // because those belong to the service rather than to this file.
 
-import { STRINGS, pickLang, setLang, fmtWindow, localToIso, isoToLocalInput, parseInviteToken, initTheme } from '/i18n.js';
+import { STRINGS, pickLang, setLang, fmtWindow, localToIso, isoToLocalInput, parseInviteToken, initTheme, initVersion } from '/i18n.js';
 
 let lang = pickLang();
 let token = localStorage.getItem('kuhu.token') || '';
@@ -632,6 +632,7 @@ $('#move-share').addEventListener('click', shareMove);
 $('#move-copy').addEventListener('click', () => copyText(moveUrl));
 
 const theme = initTheme(t);
+initVersion();
 paintStrings();
 if (token) showPostView().catch(signOut);
 else $('#join-view').classList.remove('hidden');

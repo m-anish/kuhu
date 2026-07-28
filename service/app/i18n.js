@@ -1,5 +1,41 @@
 // Both languages, written together — never a translation afterthought.
 
+import { APP_VERSION } from '/version.js';
+
+/**
+ * Show which version this phone is running, and check it against the server.
+ * A PWA can sit on cached code for a while; rather than leaving anyone to
+ * wonder, the footer states the version and offers a real fix when it is
+ * behind. Purging the caches and unregistering the worker is what a user
+ * cannot do for themselves on a phone.
+ */
+export async function initVersion() {
+  const el = document.querySelector('#version');
+  if (!el) return;
+  el.textContent = `v${APP_VERSION}`;
+  try {
+    const res = await fetch('/api/version', { cache: 'no-store' });
+    if (!res.ok) return;
+    const { version } = await res.json();
+    if (!version || version === APP_VERSION) return;
+
+    el.textContent = `v${APP_VERSION} → v${version}`;
+    el.classList.add('stale');
+    el.setAttribute('role', 'button');
+    el.setAttribute('tabindex', '0');
+    const refresh = async () => {
+      el.textContent = '…';
+      for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
+      for (const k of await caches.keys()) await caches.delete(k);
+      location.reload();
+    };
+    el.addEventListener('click', refresh);
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') refresh(); });
+  } catch {
+    // Offline. The version already shown is the honest one.
+  }
+}
+
 export const STRINGS = {
   en: {
     dir_note: '',
@@ -37,7 +73,7 @@ export const STRINGS = {
     tomorrow_am: 'Tomorrow morning',
     reason: 'Reason',
     reason_other: 'Or write it yourself',
-    kind: 'Kind',
+    kind: 'Kind of notice',
     publish: 'Publish notice',
     published: 'Posted. The area has been told.',
     published_many: 'Posted to {n} areas. Everyone has been told once.',
@@ -187,7 +223,7 @@ export const STRINGS = {
     tomorrow_am: 'कल सुबह',
     reason: 'वजह',
     reason_other: 'या ख़ुद लिखिए',
-    kind: 'प्रकार',
+    kind: 'सूचना किस बारे में',
     publish: 'सूचना भेजें',
     published: 'भेज दी गई। इलाके को पता चल गया है।',
     published_many: '{n} इलाकों में भेज दी गई। सबको एक बार पता चल गया है।',

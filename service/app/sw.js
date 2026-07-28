@@ -6,10 +6,10 @@
 // a third-party push service, and the payload cannot go stale between send
 // and delivery.
 
-const CACHE = 'kuhu-shell-v12';
+const CACHE = 'kuhu-shell-v13';
 // Canonical paths only — the asset server redirects /index.html and /post.html
 // to these, and a cached redirect is worse than no cache at all.
-const SHELL = ['/', '/post', '/join', '/app.css', '/i18n.js', '/subscribe.js', '/post.js', '/join.js', '/icon.svg', '/icon-192.png'];
+const SHELL = ['/', '/post', '/join', '/app.css', '/i18n.js', '/subscribe.js', '/post.js', '/join.js', '/version.js', '/icon.svg', '/icon-192.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -1,6 +1,6 @@
 // The join face. An invite link lands here, once.
 
-import { STRINGS, pickLang, setLang, parseInviteToken, isStandalone, isIOS, isInAppBrowser, initTheme } from '/i18n.js';
+import { STRINGS, pickLang, setLang, parseInviteToken, isStandalone, isIOS, isInAppBrowser, initTheme, initVersion } from '/i18n.js';
 
 let lang = pickLang();
 const $ = (s) => document.querySelector(s);
@@ -148,5 +148,6 @@ $('#ios-copy').addEventListener('click', copyLink);
 $('#ios-go').addEventListener('click', () => $('#ios-warn').classList.add('hidden'));
 
 const theme = initTheme(t);
+initVersion();
 paintStrings();
 check();

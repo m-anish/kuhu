@@ -292,6 +292,13 @@ button.big.warn { background: var(--alarm); color: var(--alarm-fg); }
 
 #regions .chips + .svc-head { margin-top: 1.4rem; }
 
+/* A service on the subscribe screen: its own card, tinted by its accent so
+   the two are told apart at a glance rather than by reading. */
+.svc-card > summary { gap: 0.55rem; }
+.svc-card > summary .svc-icon { font-size: 1.05rem; line-height: 1; }
+.svc-card { border-left: 3px solid color-mix(in srgb, var(--svc-accent, var(--sage)) 65%, transparent); }
+.svc-card[open] > summary { border-bottom-color: color-mix(in srgb, var(--svc-accent, var(--sage)) 25%, var(--border)); }
+
 .chip {
   appearance: none;
   font: inherit;

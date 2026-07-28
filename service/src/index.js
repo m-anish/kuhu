@@ -494,17 +494,22 @@ async function route(request, env, ctx, url) {
     if (await db.prepare('SELECT id FROM regions WHERE slug = ?1').bind(slug).first()) {
       return badRequest('that short id is already taken — try another');
     }
-    // regions.team_id survives from the pre-services schema as NOT NULL and
-    // cannot be dropped without rebuilding the table, so it is still written.
-    // Coverage — the thing that actually matters — goes in team_regions, and
-    // the adding admin's own team gets it so the area is usable immediately
-    // rather than invisible until somebody remembers to toggle it.
+    // Coverage must attach to a team *inside this service*. A site admin sits
+    // on the global root, which belongs to no service — hanging the area there
+    // would leave it real but invisible, because the public listing joins
+    // areas to services through the covering team. Prefer the admin's own team
+    // when it fits, otherwise the service's deepest crew.
+    const owner = await coveringTeam(db, me, svcRow.id);
+    if (!owner) return badRequest('this service has no crew to cover the area');
+
+    // regions.team_id survives the pre-services schema as NOT NULL and cannot
+    // be dropped without a rebuild, so it is still written.
     await db.prepare(
       'INSERT INTO regions (service_id, team_id, slug, name_en, name_hi) VALUES (?1, ?2, ?3, ?4, ?5)',
-    ).bind(svcRow.id, me.team_id, slug, name_en, name_hi).run();
+    ).bind(svcRow.id, owner, slug, name_en, name_hi).run();
     const added = await db.prepare('SELECT id FROM regions WHERE slug = ?1').bind(slug).first();
     await db.prepare('INSERT OR IGNORE INTO team_regions (team_id, region_id) VALUES (?1, ?2)')
-      .bind(me.team_id, added.id).run();
+      .bind(owner, added.id).run();
     return json({ slug, name_en, name_hi }, 201);
   }
 
@@ -538,9 +543,13 @@ async function route(request, env, ctx, url) {
     const region = await db.prepare('SELECT id FROM regions WHERE service_id = ?1 AND slug = ?2')
       .bind(svcRowCov.id, String(body?.area || '')).first();
     if (!region) return notFound();
-    // Attach to the team the admin sits on, or the named team inside their tree.
+    // Same rule as adding an area: coverage belongs to a team inside the
+    // service, never to a root that spans several of them.
     const teams = await teamTree(db, me.team_id);
-    const teamId = body?.team && teams.includes(Number(body.team)) ? Number(body.team) : me.team_id;
+    const teamId = body?.team && teams.includes(Number(body.team))
+      ? Number(body.team)
+      : await coveringTeam(db, me, svcRowCov.id);
+    if (!teamId) return badRequest('this service has no crew to cover the area');
     if (on) {
       await db.prepare('INSERT OR IGNORE INTO team_regions (team_id, region_id) VALUES (?1, ?2)')
         .bind(teamId, region.id).run();
@@ -760,6 +769,25 @@ async function slugsToRegionIds(db, serviceId, slugs) {
     `SELECT id, slug FROM regions WHERE service_id = ?1 AND slug IN (${marks})`,
   ).bind(serviceId, ...slugs).all();
   return new Map(results.map((r) => [r.slug, r.id]));
+}
+
+/**
+ * Which team should hold coverage for an area in this service: the acting
+ * admin's own team if it belongs to the service, otherwise the service's
+ * lowest crew. Never a root that spans services — an area hung there is
+ * invisible to the public listing.
+ */
+async function coveringTeam(db, me, serviceId) {
+  if (me.service_id === serviceId) return me.team_id;
+  const inTree = await teamTree(db, me.team_id);
+  if (inTree.length === 0) return null;
+  const marks = inTree.map((_, i) => `?${i + 2}`).join(',');
+  const row = await db.prepare(
+    `SELECT id FROM teams
+     WHERE service_id = ?1 AND id IN (${marks})
+     ORDER BY (parent_id = 900) ASC, id DESC LIMIT 1`,
+  ).bind(serviceId, ...inTree).first();
+  return row?.id ?? null;
 }
 
 /** Create a team, satisfying the vestigial NOT NULL invite_code. */

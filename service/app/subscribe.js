@@ -7,6 +7,18 @@
 
 import { STRINGS, pickLang, setLang, fmtWindow, initTheme, initVersion } from '/i18n.js';
 
+// Someone who posts should land on the posting screen when they open the app,
+// not on the subscribe screen they will never use.
+//
+// The redirect fires only on an app *launch* — the manifest's start_url is
+// "/?home=1", and nothing else carries that marker. A crew member who taps
+// "Subscribe instead" from /post arrives at a plain "/" and stays there,
+// because they may well want notices for their own household too. Redirecting
+// on "signed in" alone would make that link bounce straight back.
+if (new URLSearchParams(location.search).has('home') && localStorage.getItem('kuhu.token')) {
+  location.replace('/post');
+}
+
 let lang = pickLang();
 let services = [];
 /** Chosen topics as "service/area" strings — one flat set, easy to store. */
@@ -63,47 +75,76 @@ async function loadServices() {
 }
 
 /**
- * One service: a plain list of areas, no mention of services anywhere.
- * Several: a labelled block per service. Same markup either way, so nothing
- * has to be re-learned when a second service arrives.
+ * One service: a plain list of areas, and the word "service" never appears.
+ * Several: one card per service, which opens to reveal its own areas. A card
+ * rather than a filter chip, so choices made in one service stay visible while
+ * another is open — these are additive, not a switch between views.
  */
 function paintPicker() {
   const box = $('#regions');
   box.textContent = '';
-  const single = services.length === 1;
+
+  if (services.length === 1) {
+    box.append(areaChips(services[0]));
+    return;
+  }
 
   for (const svc of services) {
-    if (!single) {
-      const head = document.createElement('div');
-      head.className = 'svc-head';
-      head.innerHTML = `<span class="svc-icon" aria-hidden="true"></span><span class="svc-name"></span>`;
-      head.querySelector('.svc-icon').textContent = svc.icon || '';
-      head.querySelector('.svc-name').textContent = name(svc);
-      head.style.setProperty('--svc-accent', svc.accent || 'var(--sage)');
-      box.append(head);
-    }
-    const chips = document.createElement('div');
-    chips.className = 'chips';
-    for (const area of svc.regions) {
-      const k = key(svc.slug, area.slug);
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'chip';
-      b.textContent = name(area);
-      b.setAttribute('aria-pressed', String(chosen.has(k)));
-      if (!single) b.setAttribute('aria-label', `${name(area)} — ${name(svc)}`);
-      b.addEventListener('click', () => {
-        chosen.has(k) ? chosen.delete(k) : chosen.add(k);
-        saveChosen();
-        b.setAttribute('aria-pressed', String(chosen.has(k)));
-        paintUpcoming();
-        paintApiExample();
-        if (currentSubscription) syncSubscription(currentSubscription);
-      });
-      chips.append(b);
-    }
-    box.append(chips);
+    const picked = svc.regions.filter((a) => chosen.has(key(svc.slug, a.slug))).length;
+    const card = document.createElement('details');
+    card.className = 'acc svc-card';
+    card.style.setProperty('--svc-accent', svc.accent || 'var(--sage)');
+    // Open it if they already follow something here, or if it is the only
+    // place anything could go.
+    card.open = picked > 0;
+
+    const sum = document.createElement('summary');
+    sum.innerHTML = `
+      <span class="svc-icon" aria-hidden="true"></span>
+      <span class="acc-title"></span>
+      <span class="acc-count"></span>`;
+    sum.querySelector('.svc-icon').textContent = svc.icon || '';
+    sum.querySelector('.acc-title').textContent = name(svc);
+    sum.querySelector('.acc-count').textContent = picked ? String(picked) : '';
+    card.append(sum);
+
+    const body = document.createElement('div');
+    body.className = 'acc-body';
+    body.append(areaChips(svc));
+    card.append(body);
+    box.append(card);
   }
+}
+
+/** The area chips for one service. */
+function areaChips(svc) {
+  const chips = document.createElement('div');
+  chips.className = 'chips';
+  for (const area of svc.regions) {
+    const k = key(svc.slug, area.slug);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.textContent = name(area);
+    b.setAttribute('aria-pressed', String(chosen.has(k)));
+    if (services.length > 1) b.setAttribute('aria-label', `${name(area)} — ${name(svc)}`);
+    b.addEventListener('click', () => {
+      chosen.has(k) ? chosen.delete(k) : chosen.add(k);
+      saveChosen();
+      b.setAttribute('aria-pressed', String(chosen.has(k)));
+      // Keep the card's count in step without collapsing what they have open.
+      const card = b.closest('.svc-card');
+      if (card) {
+        const n = svc.regions.filter((a) => chosen.has(key(svc.slug, a.slug))).length;
+        card.querySelector('.acc-count').textContent = n ? String(n) : '';
+      }
+      paintUpcoming();
+      paintApiExample();
+      if (currentSubscription) syncSubscription(currentSubscription);
+    });
+    chips.append(b);
+  }
+  return chips;
 }
 
 function paintApiExample() {

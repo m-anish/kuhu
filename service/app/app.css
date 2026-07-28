@@ -793,3 +793,33 @@ html[lang='hi'] [data-guide-lang='en'] { display: none; }
   background: rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(2px);
 }
+
+/* ---------- areas nested under a region ---------- */
+/* A region is not a different kind of thing from an area — it is an area with
+   areas inside it — so this is a grouping box rather than a new component. */
+.rgroup {
+  border-left: 2px solid var(--border);
+  padding-left: 0.7rem;
+  margin: 0.7rem 0;
+}
+
+.rgroup-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
+.rgroup-name {
+  font-size: 0.85rem;
+  color: var(--dim);
+  font-weight: 600;
+}
+
+.chip.whole { font-size: 0.8rem; padding: 0.35rem 0.7rem; }
+
+/* Areas covered by a whole-region pick: shown, so you can see what you get,
+   but not individually selectable while the region choice is what counts. */
+.covered { opacity: 0.55; }
+.covered button { cursor: default; }

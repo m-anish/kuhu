@@ -19,6 +19,10 @@ The service runs at [kuhuapp.starstucklab.com](https://kuhuapp.starstucklab.com)
 - Posting to **several areas at once** — one act, one row per area tied by a
   batch id, cancelled together, and one notification even for someone who
   follows three of them.
+- **Areas nest into regions** — one `parent_id`, three levels. Posting a region
+  expands to its areas now; subscribing to one stores the region and expands at
+  notify time, so an area added under it later still reaches everyone who
+  already chose it.
 - **QR codes** next to every invite and every move-to-a-new-phone link, drawn
   in the browser so the token never travels as a URL parameter — plus a camera
   scanner inside the app, which exists because the phone's own camera opens
@@ -107,29 +111,22 @@ table (one person, many devices) rather than a single `token_hash`.
 revocation stops them. A lost-and-unreported phone therefore keeps working.
 Fine at this size, wrong at ten times this size.
 
-**Nested areas (state → district → area).** Cheap in the schema: one
-`regions.parent_id` column and the same recursive CTE already running in
-production for nested teams. Notices would still attach to a leaf area; the
-tree would only change who *hears* about one.
-
-The valuable half is **hierarchical subscribing** — pick "Kangra", get
-everything beneath it. One subtlety decides whether it works: the expansion has
-to happen at *notify* time, not at subscribe time. Expanding when someone
-subscribes would freeze their selection, so an area added under Kangra next
-year would reach nobody who had already subscribed. Walk *up* from the notice's
-area to its ancestors instead, and match subscriptions against that set. The
-`SELECT DISTINCT` fan-out written for multi-area notices already protects the
-one-buzz promise here — somebody subscribed to both Kangra and Naddi must still
-get exactly one notification — and that is the first thing to regression-test.
+~~**Nested areas (state → district → area).**~~ **Built**, and it landed the way
+this section predicted: one `regions.parent_id`, the same recursive CTE already
+running for nested teams, and notices still attaching to leaf areas. Expansion
+happens at *notify* time for subscriptions and at *post* time for notices — see
+[service/README.md](../service/README.md#areas-as-a-tree) for why those two
+directions differ. `SELECT DISTINCT` on the fan-out did carry the one-buzz
+promise across, and `npm run test:tree` now pins it.
 
 **Settled, so don't re-litigate it:** poster reach stays derived from the team
 tree alone, never from the region tree. See [concept.md](concept.md).
 
-**The real cost is not the schema, it is the interface.** Six chips on one
-screen is a good interface for a lineman in the rain. A state → district → area
-tree on a 360px phone, for readers who may not read comfortably, is a hard
-design problem, and it — not the SQL — decides whether this feature helps or
-just makes the app worse. Watch a real person use it before building.
+**What was NOT settled by building it: the interface.** Six chips on one screen
+is a good interface for a lineman in the rain. The nesting is now in the app,
+but nobody has watched a real person use it on a 360px phone — and that, not
+the SQL, decides whether the feature helps or just makes the app worse. Until
+someone has, keep trees shallow and the flat case the common one.
 
 **Area discovery at scale.** Six chips are a fine interface. Sixty are not — a
 district would need search, or a map, or "enter the code on the pole outside

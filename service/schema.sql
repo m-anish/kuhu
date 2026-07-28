@@ -49,15 +49,25 @@ CREATE TABLE IF NOT EXISTS teams (
 -- electricity feeders and water zones need not line up. The slug is globally
 -- unique (not per-service) so that public URLs and MQTT topics never depend on
 -- reading the service to disambiguate; give water's tank zone 'naddi-tank'.
+-- Areas form a TREE within a service: a region has areas under it. One table,
+-- not two — depth is what makes something read as "region" rather than "area",
+-- and a second table called `regions` next to this one would be a trap.
+--
+-- Notices always live on LEAVES. Posting to a region expands to its leaves at
+-- post time; subscribing to a region stores the region and expands at NOTIFY
+-- time, so an area added under it next year still reaches everyone who
+-- subscribed to the region. Delivery walks up, reads walk down.
 CREATE TABLE IF NOT EXISTS regions (
   id         INTEGER PRIMARY KEY,
   service_id INTEGER NOT NULL REFERENCES services(id),
   slug       TEXT NOT NULL UNIQUE,            -- permanent once anyone subscribes
   name_en    TEXT NOT NULL,
   name_hi    TEXT NOT NULL,
+  parent_id  INTEGER REFERENCES regions(id),  -- NULL = a root; max depth 3
   team_id    INTEGER                          -- vestigial; coverage is team_regions
 );
 CREATE INDEX IF NOT EXISTS regions_service ON regions(service_id);
+CREATE INDEX IF NOT EXISTS regions_parent ON regions(parent_id);
 
 CREATE TABLE IF NOT EXISTS team_regions (
   team_id   INTEGER NOT NULL REFERENCES teams(id),

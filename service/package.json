@@ -13,7 +13,8 @@
     "db:seed:remote": "wrangler d1 execute kuhu --remote --file=seed.sql",
     "vapid": "node tools/gen-vapid.mjs",
     "vendor:jsqr": "node tools/vendor-jsqr.mjs",
-    "test:qr": "node tools/qr-selftest.mjs"
+    "test:qr": "node tools/qr-selftest.mjs",
+    "test:tree": "node tools/tree-selftest.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.28.1",

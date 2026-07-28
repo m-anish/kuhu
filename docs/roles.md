@@ -43,8 +43,10 @@ That's why a service admin never sees another service. Not hidden. Just not belo
 ### What you do
 1. Open the site
 2. Tap a service (⚡ Electricity)
-3. Tick your areas
+3. Tick your areas — or tap **All of it** on a region to take the whole thing
 4. Tap **Notify me**
+
+Pick a whole region and you're covered for **every area in it, forever** — including ones added after you chose. You don't have to come back and re-tick.
 
 Done. Now you hear nothing until there's something to hear.
 
@@ -82,6 +84,8 @@ Open **Post a notice**, work down:
 ### Things worth knowing
 
 **Multiple areas = one notice.** Not four notices. Cancel it and all four cancel.
+
+**Regions are a shortcut.** *All of it* ticks every area inside — so the notice still says exactly which places it's about.
 
 **Presets come with Hindi already written.** Type your own and it goes out only in the language you typed it in.
 
@@ -132,6 +136,28 @@ Add one, rename one, or tap to say whether your crew answers for it.
 > ⚠️ **The short id is permanent.** It's in web addresses and in every subscriber's saved choices. Names can change. The id can't.
 
 > **Areas belong to your service alone.** An electricity feeder and a water zone divide the same valley differently.
+
+#### Areas can sit inside other areas
+
+Set **Inside** when adding an area, or **Move** on an existing one.
+
+```
+Upper Dharamshala      ← a region
+  ├── Naddi
+  └── McLeodganj
+Sidhpur                ← a plain area, on its own
+```
+
+There's no separate "region" thing to create. **An area with areas inside it is a region.** That's all.
+
+Three levels deep, maximum.
+
+**Why it's worth doing:**
+
+| | |
+|---|---|
+| **Posting** | Tap *All of it* to hit every area in the region at once |
+| **Subscribing** | Someone picks the region and gets everything in it — **including areas you add later** |
 
 ### What you can't do
 - Create a service
@@ -187,6 +213,7 @@ Version sits bottom-right of every screen. If the server is ahead of your phone,
 | Invite people | — | — | ✅ | ✅ |
 | Remove people | — | — | ✅ | ✅ |
 | Add / rename areas | — | — | ✅ | ✅ |
+| Nest areas into regions | — | — | ✅ | ✅ |
 | Create a **service** | — | — | — | ✅ |
 | See **other** services | — | — | — | ✅ |
 

@@ -33,7 +33,7 @@ import { json, badRequest, unauthorized, forbidden, notFound, corsPreflight, ran
 import { notifyRegions } from './push.js';
 import { mirrorToTelegram } from './telegram.js';
 import { publishMqtt, topicFor } from './mqtt.js';
-import { ROLES, rank, isAdmin, isSiteAdmin, teamTree, scopedCoverage, scopedServices, publicService, coverageByService } from './scope.js';
+import { ROLES, rank, isAdmin, isSiteAdmin, teamTree, scopedCoverage, scopedServices, publicService, coverageByService, regionSubtree, regionLeaves, regionDepth, deepestBelow, MAX_REGION_DEPTH } from './scope.js';
 // Bundled into the Worker at deploy time; the browser reads its own cached
 // copy of the same file, so the two disagreeing proves a stale install.
 import { APP_VERSION } from '../app/version.js';
@@ -76,22 +76,36 @@ async function route(request, env, ctx, url) {
   // to looking single-service.
   if (method === 'GET' && path === '/api/services') {
     const { results } = await db.prepare(
-      `SELECT DISTINCT s.id, s.slug, s.name_en, s.name_hi, s.icon, s.accent,
+      `WITH RECURSIVE covered(id, service_id) AS (
+         SELECT tr.region_id, t.service_id
+         FROM team_regions tr
+         JOIN teams t ON t.id = tr.team_id
+         WHERE t.service_id IS NOT NULL
+         UNION
+         SELECT r.id, r.service_id FROM regions r JOIN covered ON r.parent_id = covered.id
+       )
+       SELECT DISTINCT s.id, s.slug, s.name_en, s.name_hi, s.icon, s.accent,
               s.kinds, s.reasons, s.sort,
-              r.slug AS region_slug, r.name_en AS region_en, r.name_hi AS region_hi
+              r.slug AS region_slug, r.name_en AS region_en, r.name_hi AS region_hi,
+              p.slug AS parent_slug,
+              NOT EXISTS (SELECT 1 FROM regions c WHERE c.parent_id = r.id) AS is_leaf
        FROM services s
-       LEFT JOIN teams t        ON t.service_id = s.id
-       LEFT JOIN team_regions tr ON tr.team_id = t.id
-       LEFT JOIN regions r      ON r.id = tr.region_id AND r.service_id = s.id
+       LEFT JOIN covered cv      ON cv.service_id = s.id
+       LEFT JOIN regions r       ON r.id = cv.id AND r.service_id = s.id
+       LEFT JOIN regions p       ON p.id = r.parent_id
        WHERE s.enabled = 1
-       ORDER BY s.sort, s.slug, r.slug`,
+       ORDER BY s.sort, s.slug, COALESCE(p.slug, r.slug), r.parent_id IS NOT NULL, r.slug`,
     ).all();
     const byService = new Map();
     for (const row of results) {
       if (!byService.has(row.slug)) byService.set(row.slug, { ...publicService(row), regions: [] });
       if (row.region_slug) {
         byService.get(row.slug).regions.push({
-          slug: row.region_slug, name_en: row.region_en, name_hi: row.region_hi,
+          slug: row.region_slug,
+          name_en: row.region_en,
+          name_hi: row.region_hi,
+          parent: row.parent_slug ?? null,
+          leaf: Boolean(row.is_leaf),
         });
       }
     }
@@ -108,13 +122,18 @@ async function route(request, env, ctx, url) {
       'SELECT id, slug, name_en, name_hi FROM regions WHERE service_id = ?1 AND slug = ?2',
     ).bind(svc.id, upcoming[2]).first();
     if (!region) return notFound();
+    // Asking about a region means asking about everything inside it, so this
+    // walks DOWN — the mirror of delivery, which walks up. For a plain area
+    // with no children the subtree is just itself and nothing changes.
+    const inside = await regionSubtree(db, [region.id]);
+    const marks = inside.map((_, i) => `?${i + 2}`).join(',');
     const { results } = await db.prepare(
       `SELECT id, kind, win_from, win_to, reason_en, reason_hi, status, posted_at, batch_id
        FROM notices
-       WHERE service_id = ?1 AND region_id = ?2 AND status = 'scheduled'
+       WHERE service_id = ?1 AND region_id IN (${marks}) AND status = 'scheduled'
          AND datetime(win_to) > datetime('now')
        ORDER BY datetime(win_from) LIMIT 20`,
-    ).bind(svc.id, region.id).all();
+    ).bind(svc.id, ...inside).all();
     return json({
       service: { slug: svc.slug, name_en: svc.name_en, name_hi: svc.name_hi, icon: svc.icon },
       area: { slug: region.slug, name_en: region.name_en, name_hi: region.name_hi },
@@ -256,27 +275,43 @@ async function route(request, env, ctx, url) {
     if (wanted.length === 0) return badRequest('pick at least one area');
     if (wanted.length > 25) return badRequest('too many areas at once');
 
-    const targets = wanted.map((slug) => svc.regions.find((r) => r.slug === slug));
-    if (targets.some((r) => !r)) return forbidden('not your area');
+    const asked = wanted.map((slug) => svc.regions.find((r) => r.slug === slug));
+    if (asked.some((r) => !r)) return forbidden('not your area');
 
     const svcRow = await db.prepare('SELECT id FROM services WHERE slug = ?1').bind(svc.slug).first();
-    const regionIds = await slugsToRegionIds(db, svcRow.id, targets.map((r) => r.slug));
+    const askedIds = await slugsToRegionIds(db, svcRow.id, asked.map((r) => r.slug));
+
+    // Notices live on LEAVES. Naming a region here means naming everything
+    // inside it, expanded now rather than at delivery: that keeps one notice
+    // per real place, so per-area MQTT topics and the public feed stay exactly
+    // as they were, and a device never has to understand the tree.
+    //
+    // Picking a region AND an area inside it is not an error, just the same
+    // place said twice — regionLeaves dedupes it.
+    const leafIds = await regionLeaves(db, [...askedIds.values()]);
+    if (leafIds.length === 0) return badRequest('pick at least one area');
+    if (leafIds.length > 25) return badRequest('too many areas at once');
+
+    const marks = leafIds.map((_, i) => `?${i + 1}`).join(',');
+    const { results: leaves } = await db.prepare(
+      `SELECT id, slug, name_en, name_hi FROM regions WHERE id IN (${marks}) ORDER BY slug`,
+    ).bind(...leafIds).all();
 
     const batch = randomId('bat');
     const ids = [];
-    for (const region of targets) {
+    for (const region of leaves) {
       const id = randomId('ntc');
       ids.push(id);
       await db.prepare(
         `INSERT INTO notices (id, service_id, region_id, kind, win_from, win_to, reason_en, reason_hi, posted_by, batch_id)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
-      ).bind(id, svcRow.id, regionIds.get(region.slug), kind, from, to, reason_en, reason_hi, me.id, batch).run();
+      ).bind(id, svcRow.id, region.id, kind, from, to, reason_en, reason_hi, me.id, batch).run();
     }
 
-    ctx.waitUntil(fanOut(db, env, svc, svcRow.id, targets.map((r) => ({ ...r, id: regionIds.get(r.slug) })), {
+    ctx.waitUntil(fanOut(db, env, svc, svcRow.id, leaves, {
       kind, status: 'scheduled', from, to, reason_en, reason_hi,
     }));
-    return json({ ids, batch_id: batch, areas: targets.length, status: 'scheduled' }, 201);
+    return json({ ids, batch_id: batch, areas: leaves.length, status: 'scheduled' }, 201);
   }
 
   const cancel = path.match(/^\/api\/notices\/(ntc_[a-z0-9]+)\/cancel$/);
@@ -510,15 +545,69 @@ async function route(request, env, ctx, url) {
     const owner = await coveringTeam(db, me, svcRow.id);
     if (!owner) return badRequest('this service has no crew to cover the area');
 
+    // Optionally nested under an existing area of the same service, which is
+    // what turns that one into a "region" — there is no separate kind of thing.
+    let parentId = null;
+    if (body?.parent) {
+      const parent = await db.prepare(
+        'SELECT id FROM regions WHERE service_id = ?1 AND slug = ?2',
+      ).bind(svcRow.id, String(body.parent)).first();
+      if (!parent) return badRequest('no such area to nest under');
+      if (await regionDepth(db, parent.id) >= MAX_REGION_DEPTH) {
+        return badRequest(`areas nest ${MAX_REGION_DEPTH} deep at most`);
+      }
+      parentId = parent.id;
+    }
+
     // regions.team_id survives the pre-services schema as NOT NULL and cannot
     // be dropped without a rebuild, so it is still written.
     await db.prepare(
-      'INSERT INTO regions (service_id, team_id, slug, name_en, name_hi) VALUES (?1, ?2, ?3, ?4, ?5)',
-    ).bind(svcRow.id, owner, slug, name_en, name_hi).run();
+      'INSERT INTO regions (service_id, team_id, slug, name_en, name_hi, parent_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)',
+    ).bind(svcRow.id, owner, slug, name_en, name_hi, parentId).run();
     const added = await db.prepare('SELECT id FROM regions WHERE slug = ?1').bind(slug).first();
     await db.prepare('INSERT OR IGNORE INTO team_regions (team_id, region_id) VALUES (?1, ?2)')
       .bind(owner, added.id).run();
-    return json({ slug, name_en, name_hi }, 201);
+    return json({ slug, name_en, name_hi, parent: body?.parent ?? null }, 201);
+  }
+
+  // Move an area under another, or out to the top. Separate from rename
+  // because it is the one area edit that can corrupt the shape of the tree.
+  const nestArea = path.match(/^\/api\/services\/([a-z0-9-]+)\/areas\/([a-z0-9-]+)\/nest$/);
+  if (method === 'POST' && nestArea) {
+    if (!me) return unauthorized();
+    if (!isAdmin(me)) return forbidden('admin only');
+    const svcRow = await myService(db, me, nestArea[1]);
+    if (!svcRow) return forbidden('not your service');
+    const body = await request.json().catch(() => null);
+    const child = await db.prepare(
+      'SELECT id, slug FROM regions WHERE service_id = ?1 AND slug = ?2',
+    ).bind(svcRow.id, nestArea[2]).first();
+    if (!child) return notFound();
+
+    if (!body?.parent) {
+      await db.prepare('UPDATE regions SET parent_id = NULL WHERE id = ?1').bind(child.id).run();
+      return json({ slug: child.slug, parent: null });
+    }
+
+    const parent = await db.prepare(
+      'SELECT id FROM regions WHERE service_id = ?1 AND slug = ?2',
+    ).bind(svcRow.id, String(body.parent)).first();
+    if (!parent) return badRequest('no such area to nest under');
+    if (parent.id === child.id) return badRequest('an area cannot contain itself');
+
+    // The guard that matters: nesting an area under its own descendant would
+    // cut that whole branch loose into a cycle, invisible to every query that
+    // starts from a root.
+    const below = await regionSubtree(db, [child.id]);
+    if (below.includes(parent.id)) return badRequest('that would put the area inside itself');
+
+    const deepest = await deepestBelow(db, child.id);
+    if ((await regionDepth(db, parent.id)) + deepest > MAX_REGION_DEPTH) {
+      return badRequest(`areas nest ${MAX_REGION_DEPTH} deep at most`);
+    }
+
+    await db.prepare('UPDATE regions SET parent_id = ?2 WHERE id = ?1').bind(child.id, parent.id).run();
+    return json({ slug: child.slug, parent: String(body.parent) });
   }
 
   const renameArea = path.match(/^\/api\/services\/([a-z0-9-]+)\/areas\/([a-z0-9-]+)\/rename$/);
@@ -577,9 +666,17 @@ async function route(request, env, ctx, url) {
     const svcRow = await myService(db, me, listAreas[1]);
     if (!svcRow) return forbidden('not your service');
     const { results } = await db.prepare(
-      'SELECT slug, name_en, name_hi FROM regions WHERE service_id = ?1 ORDER BY slug',
+      `SELECT r.slug, r.name_en, r.name_hi, p.slug AS parent,
+              NOT EXISTS (SELECT 1 FROM regions c WHERE c.parent_id = r.id) AS is_leaf
+       FROM regions r
+       LEFT JOIN regions p ON p.id = r.parent_id
+       WHERE r.service_id = ?1
+       ORDER BY COALESCE(p.slug, r.slug), r.parent_id IS NOT NULL, r.slug`,
     ).bind(svcRow.id).all();
-    return json({ areas: results });
+    return json({ areas: results.map((a) => ({
+      slug: a.slug, name_en: a.name_en, name_hi: a.name_hi,
+      parent: a.parent ?? null, leaf: Boolean(a.is_leaf),
+    })) });
   }
 
 
@@ -734,16 +831,32 @@ async function route(request, env, ctx, url) {
     const sub = await db.prepare('SELECT id, lang FROM subscriptions WHERE endpoint = ?1')
       .bind(body.endpoint).first();
     if (!sub) return notFound();
+    // Must match notifyRegions exactly, or a region subscriber gets the buzz
+    // and then no text to put in it. `anc` maps every area to itself plus all
+    // its ancestors, so a subscription on Kangra matches a notice on Naddi.
+    //
+    // DISTINCT because somebody subscribed to both Kangra and Naddi matches the
+    // same notice twice, and the region names below are aggregated — without it
+    // the notification would read "Naddi · Naddi".
     const { results } = await db.prepare(
-      `SELECT n.id, n.kind, n.win_from, n.win_to, n.reason_en, n.reason_hi, n.status,
+      `WITH RECURSIVE anc(region_id, ancestor_id) AS (
+         SELECT id, id FROM regions
+         UNION
+         SELECT a.region_id, r.parent_id
+         FROM anc a JOIN regions r ON r.id = a.ancestor_id
+         WHERE r.parent_id IS NOT NULL
+       )
+       SELECT DISTINCT
+              n.id, n.kind, n.win_from, n.win_to, n.reason_en, n.reason_hi, n.status,
               n.posted_at, n.batch_id,
               s.name_en AS service_en, s.name_hi AS service_hi, s.icon, s.kinds,
               r.name_en AS region_en, r.name_hi AS region_hi
        FROM notices n
        JOIN services s ON s.id = n.service_id
        JOIN regions r  ON r.id = n.region_id
+       JOIN anc        ON anc.region_id = n.region_id
        JOIN subscription_regions sr
-         ON sr.region_id = n.region_id AND sr.service_id = n.service_id
+         ON sr.region_id = anc.ancestor_id AND sr.service_id = n.service_id
        WHERE sr.subscription_id = ?1
          AND datetime(n.posted_at) > datetime('now', '-2 days')
          AND datetime(n.win_to) > datetime('now')

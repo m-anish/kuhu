@@ -97,6 +97,38 @@ checks it two ways: every code round-trips through the vendored decoder, and
 every matrix is compared module-for-module against `qrcode@1.5.4` including
 mask choice.
 
+## Areas as a tree
+
+Areas nest: an area with areas inside it *is* a region. One table, one nullable
+`parent_id`, three levels at most. There is no second kind of thing, and
+deliberately no second table called `regions` sitting next to the one already
+named that.
+
+**Notices always live on leaves.** Everything else follows from that:
+
+| | Direction | When |
+|---|---|---|
+| **Posting** a region | expands **down** to its leaves | at post time |
+| **Subscribing** to a region | stored as the region | expanded at **notify** time |
+| **Delivering** a notice | walks **up** to the ancestors | per notice |
+| **Reading** an area's feed | walks **down** to descendants | per request |
+
+The asymmetry between the first two is the whole design. A notice is about the
+places it is actually about, so posting resolves immediately — which also means
+MQTT topics and the public feed stay per-area and no device has to understand
+the tree. A subscription is a standing interest, so it must *not* resolve
+immediately: expanding it at subscribe time would freeze it, and an area added
+under that region next year would reach nobody who had already subscribed.
+
+`SELECT DISTINCT` on the fan-out is load-bearing now — somebody subscribed to
+both a region and an area inside it matches twice and must still be woken once.
+`npm run test:tree` asserts exactly that, against the shipped functions rather
+than a copy of their SQL.
+
+Re-parenting is guarded server-side: an area cannot be moved inside its own
+descendant (which would cut the branch loose into a cycle), and no move may push
+the tree past three levels.
+
 ## Where a notice goes
 
 Posting or cancelling fans out to three places at once, each swallowing its own

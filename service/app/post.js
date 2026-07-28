@@ -6,7 +6,7 @@
 // gets a service switcher, and the kinds and reason presets change with it,
 // because those belong to the service rather than to this file.
 
-import { STRINGS, pickLang, setLang, fmtWindow, localToIso, isoToLocalInput, parseInviteToken, initTheme, initVersion } from '/i18n.js';
+import { STRINGS, pickLang, setLang, fmtWindow, localToIso, isoToLocalInput, parseInviteToken, initTheme, initVersion, regionTree, leavesOf } from '/i18n.js';
 import { qrSvg } from '/qr.js';
 import { scanSupported, openScanner } from '/scan.js';
 
@@ -140,17 +140,67 @@ function paintAreas() {
     return;
   }
   if (svc.regions.length === 1) sel.regions.add(svc.regions[0].slug);
-  for (const a of svc.regions) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'chip';
-    b.textContent = name(a);
-    b.setAttribute('aria-pressed', String(sel.regions.has(a.slug)));
-    b.addEventListener('click', () => {
-      sel.regions.has(a.slug) ? sel.regions.delete(a.slug) : sel.regions.add(a.slug);
+
+  // Posting always selects LEAVES, even when you tap "All of Kangra" — a
+  // notice is about the places it is actually about, so the expansion happens
+  // here and now. Subscribing does the opposite on purpose: see subscribe.js.
+  paintRegionGroup(box, regionTree(svc.regions));
+}
+
+function areaChip(node) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'chip';
+  b.textContent = name(node);
+  b.setAttribute('aria-pressed', String(sel.regions.has(node.slug)));
+  b.addEventListener('click', () => {
+    sel.regions.has(node.slug) ? sel.regions.delete(node.slug) : sel.regions.add(node.slug);
+    paintAreas();
+  });
+  return b;
+}
+
+function paintRegionGroup(box, nodes) {
+  // Plain areas at this level sit together in one row.
+  const flat = nodes.filter((n) => !n.children.length);
+  if (flat.length) {
+    const chips = document.createElement('div');
+    chips.className = 'chips';
+    for (const n of flat) chips.append(areaChip(n));
+    box.append(chips);
+  }
+
+  for (const node of nodes.filter((n) => n.children.length)) {
+    const leaves = leavesOf(node);
+    const all = leaves.every((l) => sel.regions.has(l.slug));
+
+    const group = document.createElement('div');
+    group.className = 'rgroup';
+
+    const head = document.createElement('div');
+    head.className = 'rgroup-head';
+    const label = document.createElement('span');
+    label.className = 'rgroup-name';
+    label.textContent = name(node);
+    head.append(label);
+
+    const whole = document.createElement('button');
+    whole.type = 'button';
+    whole.className = 'chip whole';
+    whole.textContent = t('whole_region');
+    whole.setAttribute('aria-pressed', String(all));
+    whole.addEventListener('click', () => {
+      for (const l of leaves) {
+        if (all) sel.regions.delete(l.slug);
+        else sel.regions.add(l.slug);
+      }
       paintAreas();
     });
-    box.append(b);
+    head.append(whole);
+    group.append(head);
+
+    paintRegionGroup(group, node.children);
+    box.append(group);
   }
 }
 
@@ -592,10 +642,21 @@ async function loadAllAreas() {
 function paintGeography() {
   const box = $('#areas-all');
   box.textContent = '';
+  paintParentOptions();
   for (const a of allAreas) {
     const el = document.createElement('div');
     el.className = 'row';
-    el.innerHTML = `<div><strong>${escapeHtml(name(a))}</strong><div class="sub"><code>${escapeHtml(a.slug)}</code></div></div>`;
+    const inside = a.parent
+      ? `<div class="sub">${escapeHtml(t('inside_of').replace('{region}', labelOfSlug(a.parent)))}</div>`
+      : '';
+    el.innerHTML = `<div><strong>${escapeHtml(name(a))}</strong>`
+      + `<div class="sub"><code>${escapeHtml(a.slug)}</code></div>${inside}</div>`;
+    const nest = document.createElement('button');
+    nest.type = 'button';
+    nest.className = 'mini';
+    nest.textContent = t('nest');
+    nest.addEventListener('click', () => nestArea(a, el));
+    el.append(nest);
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'mini';
@@ -604,6 +665,75 @@ function paintGeography() {
     el.append(btn);
     box.append(el);
   }
+}
+
+function labelOfSlug(slug) {
+  const a = allAreas.find((x) => x.slug === slug);
+  return a ? name(a) : slug;
+}
+
+/** Anything in this service can hold areas — except the one being placed. */
+function parentChoices(exclude) {
+  return allAreas.filter((a) => a.slug !== exclude);
+}
+
+function paintParentOptions() {
+  const sel = $('#new-parent');
+  if (!sel) return;
+  const keep = sel.value;
+  sel.innerHTML = `<option value="">${escapeHtml(t('inside_nothing'))}</option>`;
+  for (const a of parentChoices(null)) {
+    const o = document.createElement('option');
+    o.value = a.slug;
+    o.textContent = name(a);
+    sel.append(o);
+  }
+  sel.value = keep;
+}
+
+/** Move an area under another, or back out to the top. */
+function nestArea(area, row) {
+  if (row.querySelector('.rename-form')) return;
+  const form = document.createElement('div');
+  form.className = 'rename-form';
+  const label = document.createElement('label');
+  label.className = 'field';
+  label.innerHTML = `<span>${escapeHtml(t('area_inside'))}</span>`;
+  // Not `sel` — that is the module-level posting selection, and shadowing it
+  // here would have quietly cleared a <select> instead of the chosen areas.
+  const pick = document.createElement('select');
+  pick.innerHTML = `<option value="">${escapeHtml(t('inside_nothing'))}</option>`;
+  for (const a of parentChoices(area.slug)) {
+    const o = document.createElement('option');
+    o.value = a.slug;
+    o.textContent = name(a);
+    pick.append(o);
+  }
+  pick.value = area.parent || '';
+  label.append(pick);
+  form.append(label);
+
+  const save = document.createElement('button');
+  save.type = 'button';
+  save.className = 'big';
+  save.style.marginTop = '0.6rem';
+  save.textContent = t('save_nesting');
+  save.addEventListener('click', async () => {
+    save.disabled = true;
+    const res = await api(`/api/services/${svc.slug}/areas/${area.slug}/nest`, {
+      method: 'POST', body: JSON.stringify({ parent: pick.value || null }),
+    });
+    if (!res.ok) { say((await res.json().catch(() => ({}))).error || 'error', 'bad'); save.disabled = false; return; }
+    say(t('nesting_saved'), 'ok');
+    loadAllAreas();
+    const fresh = await api('/api/me');
+    me = await fresh.json();
+    svc = me.services.find((s) => s.slug === svc.slug) || me.services[0];
+    sel.regions.clear();
+    paintAreas();
+  });
+  form.append(save);
+  row.append(form);
 }
 
 function renameArea(area, row) {
@@ -658,6 +788,7 @@ async function addArea() {
         slug: $('#new-slug').value.trim().toLowerCase(),
         name_en: $('#new-en').value.trim(),
         name_hi: $('#new-hi').value.trim(),
+        parent: $('#new-parent').value || null,
       }),
     });
     if (!res.ok) return say((await res.json().catch(() => ({}))).error || 'error', 'bad');

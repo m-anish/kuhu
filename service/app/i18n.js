@@ -169,6 +169,16 @@ export const STRINGS = {
     foot_repo: 'Source on GitHub',
     foot_site: 'About kuhu',
     foot_help: 'Help',
+    // areas as a tree
+    whole_region: 'All of it',
+    whole_region_note: 'The whole region is selected, so every area inside it is included — including any added later. Tap "All of it" again to pick areas one by one.',
+    area_inside: 'Inside',
+    area_inside_help: 'Leave this alone for a normal area. Pick something to nest this one inside it — that is what turns the outer one into a region.',
+    inside_nothing: '— nothing, it stands on its own —',
+    inside_of: 'inside {region}',
+    nest: 'Move',
+    save_nesting: 'Save',
+    nesting_saved: 'Moved.',
     // qr
     qr_invite_hint: 'Standing next to them? Let them scan this instead of sending anything.',
     qr_move_hint: 'Open kuhu on the new phone, tap Scan a code, and point it at this.',
@@ -367,6 +377,16 @@ export const STRINGS = {
     foot_repo: 'GitHub पर कोड',
     foot_site: 'kuhu के बारे में',
     foot_help: 'मदद',
+    // areas as a tree
+    whole_region: 'पूरा इलाका',
+    whole_region_note: 'पूरा क्षेत्र चुना हुआ है, इसलिए उसके अंदर के सारे इलाके शामिल हैं — बाद में जोड़े गए भी। एक-एक इलाका चुनना हो तो "पूरा इलाका" दोबारा दबाइए।',
+    area_inside: 'किसके अंदर',
+    area_inside_help: 'सामान्य इलाके के लिए इसे ऐसे ही छोड़ दीजिए। कुछ चुनेंगे तो यह इलाका उसके अंदर आ जाएगा — इसी से बाहर वाला "क्षेत्र" बनता है।',
+    inside_nothing: '— किसी के अंदर नहीं —',
+    inside_of: '{region} के अंदर',
+    nest: 'हटाएँ-जोड़ें',
+    save_nesting: 'सहेजें',
+    nesting_saved: 'हो गया।',
     // qr
     qr_invite_hint: 'सामने ही खड़े हैं? कुछ भेजने की बजाय उन्हें यही स्कैन करने दीजिए।',
     qr_move_hint: 'नए फ़ोन पर kuhu खोलिए, कोड स्कैन करें दबाइए, और इसकी तरफ़ कैमरा कीजिए।',
@@ -451,6 +471,28 @@ export const STRINGS = {
  * link with a ?t= query, or the bare token on its own. Tokens are base64url
  * from 24 random bytes, so 32 chars of that alphabet.
  */
+/**
+ * Nest a flat area list by `parent`. Areas whose parent is not in the list
+ * become roots, which is what you want when coverage hands you a child but not
+ * the region above it.
+ */
+export function regionTree(regions) {
+  const nodes = new Map((regions || []).map((r) => [r.slug, { ...r, children: [] }]));
+  const roots = [];
+  for (const n of nodes.values()) {
+    const parent = n.parent ? nodes.get(n.parent) : null;
+    if (parent) parent.children.push(n);
+    else roots.push(n);
+  }
+  return roots;
+}
+
+/** Every leaf at or below a node — where a notice can actually land. */
+export function leavesOf(node) {
+  if (!node.children.length) return [node];
+  return node.children.flatMap(leavesOf);
+}
+
 export function parseInviteToken(text) {
   const s = String(text || '').trim();
   if (!s) return '';

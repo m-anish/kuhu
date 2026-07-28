@@ -48,18 +48,37 @@ async function vapidAuth(endpoint, env) {
  * this app. The service is part of the match: someone who wants water notices
  * for the village must not be woken by an electricity notice for it.
  *
+ * Someone subscribed to a REGION hears about every area inside it. That
+ * expansion happens here, at notify time, and not when they subscribed —
+ * expanding at subscribe time would freeze the choice, so an area added under
+ * Kangra next year would reach nobody who had already picked Kangra. So walk
+ * UP from the notice's areas to their ancestors and match against that.
+ *
+ * The SELECT DISTINCT is doing real work now: somebody subscribed to both
+ * Kangra and to Naddi inside it matches twice and must still be woken once.
+ *
  * Dead endpoints (404/410) are pruned. Runs in ctx.waitUntil, so the poster
  * never waits on fan-out.
  */
-export async function notifyRegions(db, env, serviceId, regionIds) {
+export async function subscribersForRegions(db, serviceId, regionIds) {
   const ids = [...new Set(regionIds)].filter((id) => id != null);
-  if (ids.length === 0) return;
+  if (ids.length === 0) return [];
   const marks = ids.map((_, i) => `?${i + 2}`).join(',');
-  const { results: subs } = await db.prepare(
-    `SELECT DISTINCT s.id, s.endpoint FROM subscriptions s
+  const { results } = await db.prepare(
+    `WITH RECURSIVE above(id, parent_id) AS (
+       SELECT id, parent_id FROM regions WHERE id IN (${marks})
+       UNION
+       SELECT r.id, r.parent_id FROM regions r JOIN above ON r.id = above.parent_id
+     )
+     SELECT DISTINCT s.id, s.endpoint FROM subscriptions s
      JOIN subscription_regions sr ON sr.subscription_id = s.id
-     WHERE sr.service_id = ?1 AND sr.region_id IN (${marks})`,
+     WHERE sr.service_id = ?1 AND sr.region_id IN (SELECT id FROM above)`,
   ).bind(serviceId, ...ids).all();
+  return results;
+}
+
+export async function notifyRegions(db, env, serviceId, regionIds) {
+  const subs = await subscribersForRegions(db, serviceId, regionIds);
 
   for (const sub of subs) {
     try {

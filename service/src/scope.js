@@ -39,11 +39,100 @@ export async function teamTree(db, teamId) {
   return results.map((r) => r.id);
 }
 
+// ───────────────────── the area tree ─────────────────────
+//
+// Every recursive walk below uses UNION rather than UNION ALL. Dedup is not
+// the point — termination is. A cycle in parent_id would spin forever under
+// UNION ALL, and while the write path refuses to create one, a query that
+// cannot hang whatever the data says is worth the rounding error.
+
+export const MAX_REGION_DEPTH = 3;
+
+/** A node and everything beneath it. */
+export async function regionSubtree(db, regionIds) {
+  const ids = [...new Set(regionIds)].filter((id) => id != null);
+  if (!ids.length) return [];
+  const marks = ids.map((_, i) => `?${i + 1}`).join(',');
+  const { results } = await db.prepare(
+    `WITH RECURSIVE below(id) AS (
+       SELECT id FROM regions WHERE id IN (${marks})
+       UNION
+       SELECT r.id FROM regions r JOIN below ON r.parent_id = below.id
+     )
+     SELECT id FROM below`,
+  ).bind(...ids).all();
+  return results.map((r) => r.id);
+}
+
+/**
+ * The leaves at or beneath these nodes — where notices are allowed to land.
+ * A leaf is its own leaf, so a flat area passes straight through.
+ */
+export async function regionLeaves(db, regionIds) {
+  const all = await regionSubtree(db, regionIds);
+  if (!all.length) return [];
+  const marks = all.map((_, i) => `?${i + 1}`).join(',');
+  const { results } = await db.prepare(
+    `SELECT r.id FROM regions r
+     WHERE r.id IN (${marks})
+       AND NOT EXISTS (SELECT 1 FROM regions c WHERE c.parent_id = r.id)`,
+  ).bind(...all).all();
+  return results.map((r) => r.id);
+}
+
+/** A node and everything above it, root-most last. */
+export async function regionAncestors(db, regionIds) {
+  const ids = [...new Set(regionIds)].filter((id) => id != null);
+  if (!ids.length) return [];
+  const marks = ids.map((_, i) => `?${i + 1}`).join(',');
+  const { results } = await db.prepare(
+    `WITH RECURSIVE above(id, parent_id) AS (
+       SELECT id, parent_id FROM regions WHERE id IN (${marks})
+       UNION
+       SELECT r.id, r.parent_id FROM regions r JOIN above ON r.id = above.parent_id
+     )
+     SELECT id FROM above`,
+  ).bind(...ids).all();
+  return results.map((r) => r.id);
+}
+
+/** How deep a node sits, counting itself. A root is 1. */
+export async function regionDepth(db, regionId) {
+  if (regionId == null) return 0;
+  return (await regionAncestors(db, [regionId])).length;
+}
+
+/**
+ * How many levels the subtree under a node extends, counting the node as 1.
+ * Needed before re-parenting: moving a two-level branch under a node that is
+ * already at the limit would push its leaves past the cap.
+ *
+ * The depth < 10 guard is belt and braces — UNION ALL is used here because the
+ * running depth makes rows distinct, so dedup would not stop a cycle.
+ */
+export async function deepestBelow(db, regionId) {
+  const row = await db.prepare(
+    `WITH RECURSIVE below(id, depth) AS (
+       SELECT id, 1 FROM regions WHERE id = ?1
+       UNION ALL
+       SELECT r.id, below.depth + 1
+       FROM regions r JOIN below ON r.parent_id = below.id
+       WHERE below.depth < 10
+     )
+     SELECT MAX(depth) AS d FROM below`,
+  ).bind(regionId).first();
+  return row?.d ?? 1;
+}
+
 /**
  * The (service, region) pairs this person may post to — the areas their own
- * crew covers, plus every crew beneath them. A site admin sitting at the root
- * therefore gets every service's coverage without the query knowing anything
- * about site admins.
+ * crew covers, plus every crew beneath them, plus everything beneath those
+ * areas. Covering a region means covering what is in it; otherwise nesting an
+ * area under a region a crew already answers for would silently take it away
+ * from them.
+ *
+ * A site admin sitting at the root gets every service's coverage without the
+ * query knowing anything about site admins.
  */
 export async function scopedCoverage(db, teamId) {
   const { results } = await db.prepare(
@@ -51,19 +140,28 @@ export async function scopedCoverage(db, teamId) {
        SELECT ?1
        UNION ALL
        SELECT t.id FROM teams t JOIN tree ON t.parent_id = tree.id
+     ),
+     covered(id) AS (
+       SELECT tr.region_id FROM team_regions tr JOIN tree ON tree.id = tr.team_id
+     ),
+     below(id) AS (
+       SELECT id FROM covered
+       UNION
+       SELECT r.id FROM regions r JOIN below ON r.parent_id = below.id
      )
      SELECT DISTINCT
             s.id AS service_id, s.slug AS service_slug,
             s.name_en AS service_en, s.name_hi AS service_hi,
             s.icon AS icon, s.accent AS accent, s.kinds AS kinds, s.reasons AS reasons,
             r.id AS region_id, r.slug AS region_slug,
-            r.name_en AS region_en, r.name_hi AS region_hi
-     FROM team_regions tr
-     JOIN tree           ON tree.id = tr.team_id
-     JOIN teams t        ON t.id = tr.team_id
-     JOIN services s     ON s.id = t.service_id AND s.enabled = 1
-     JOIN regions r      ON r.id = tr.region_id
-     ORDER BY s.sort, s.slug, r.slug`,
+            r.name_en AS region_en, r.name_hi AS region_hi,
+            p.slug AS parent_slug,
+            NOT EXISTS (SELECT 1 FROM regions c WHERE c.parent_id = r.id) AS is_leaf
+     FROM below
+     JOIN regions r      ON r.id = below.id
+     JOIN services s     ON s.id = r.service_id AND s.enabled = 1
+     LEFT JOIN regions p ON p.id = r.parent_id
+     ORDER BY s.sort, s.slug, COALESCE(p.slug, r.slug), r.parent_id IS NOT NULL, r.slug`,
   ).bind(teamId).all();
   return results;
 }
@@ -124,7 +222,11 @@ export function coverageByService(rows) {
       });
     }
     out.get(r.service_slug).regions.push({
-      slug: r.region_slug, name_en: r.region_en, name_hi: r.region_hi,
+      slug: r.region_slug,
+      name_en: r.region_en,
+      name_hi: r.region_hi,
+      parent: r.parent_slug ?? null,
+      leaf: Boolean(r.is_leaf),
     });
   }
   return [...out.values()];

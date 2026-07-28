@@ -26,8 +26,12 @@ The service runs at [kuhuapp.starstucklab.com](https://kuhuapp.starstucklab.com)
 - **Self-service phone move**: mint a 30-minute link on the old phone, open it
   on the new one, old phone signs out.
 - Public JSON API for gadgets, payloadless web push for people.
-- **Telegram mirror** and **retained MQTT** (`kuhu/<area>/cuts`) — both
-  optional, both silently off until configured, neither able to fail a notice.
+- **Telegram mirror** (`@kuhunotices`) and **retained MQTT**
+  (`kuhu/<area>/cuts`, HiveMQ) — neither able to fail a notice, and both
+  silently off until configured. An hourly cron clears retained payloads once
+  their window has passed.
+- Admin panel as collapsible sections; the subscriber face points at Telegram
+  and at the API/MQTT for anyone who would rather not use notifications.
 - Storage-container warnings and a paste-a-link fallback, because an installed
   app on iOS cannot see Safari's sign-in.
 
@@ -38,6 +42,12 @@ The service runs at [kuhuapp.starstucklab.com](https://kuhuapp.starstucklab.com)
 **Per-region Telegram channels.** Today the mirror posts every area to one
 channel. A district would want one channel per area — the schema change is a
 `telegram_chat_id` on `regions` plus an admin field.
+
+**Devices should ignore stale retained state anyway.** The hourly cron clears
+expired topics, but a device that boots in the gap between expiry and the next
+run will still read a finished cut. Firmware should check the `to` timestamp
+rather than trusting that the topic is current — worth saying plainly in
+whatever integration note jigawatt and lokki end up with.
 
 **Confirm the in-app browser detection on a real phone.** The `wv` User-Agent
 token is the standard Android WebView marker and the warning is written to be

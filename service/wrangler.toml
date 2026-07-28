@@ -39,8 +39,11 @@ VAPID_SUBJECT = "mailto:anishmg@umich.edu"
 TELEGRAM_CHAT_ID = "@kuhunotices"
 #
 # MQTT: retained publishes to kuhu/<area>/cuts, for gadgets that would rather
-# be told than poll.
-# MQTT_URL = "mqtts://broker.example:8883"
+# be told than poll. Credentials are secrets (MQTT_USERNAME / MQTT_PASSWORD);
+# the publisher account may publish to kuhu/# and nothing else, and devices get
+# a separate subscribe-only account so a compromised gadget cannot invent an
+# outage.
+MQTT_URL = "mqtts://873b9eb4dfb34950ae071b38bca36844.s1.eu.hivemq.cloud:8883"
 
 # Secrets (set with `wrangler secret put`):
 #   VAPID_PRIVATE_JWK  — the private key JWK JSON from tools/gen-vapid.mjs

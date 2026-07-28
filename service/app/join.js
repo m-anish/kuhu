@@ -1,6 +1,7 @@
 // The join face. An invite link lands here, once.
 
 import { STRINGS, pickLang, setLang, parseInviteToken, isStandalone, isIOS, isInAppBrowser, initTheme, initVersion } from '/i18n.js';
+import { scanSupported, openScanner } from '/scan.js';
 
 let lang = pickLang();
 const $ = (s) => document.querySelector(s);
@@ -143,6 +144,24 @@ for (const b of document.querySelectorAll('.lang button')) {
 $('#join').addEventListener('click', join);
 $('#name').addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); });
 $('#paste-go').addEventListener('click', goPasted);
+
+// Only offered where it can actually work — no camera, or an insecure origin,
+// and the button would be a dead end rather than a choice.
+if (scanSupported()) $('#scan').classList.remove('hidden');
+$('#scan').addEventListener('click', async () => {
+  let text;
+  try {
+    text = await openScanner(t);
+  } catch (err) {
+    return say(t(err.message) || t('scan_failed'));
+  }
+  if (text === null) return;                     // backed out
+  // Never navigate to what was scanned: take a token from it or nothing.
+  const found = parseInviteToken(text);
+  if (!found) return say(t('scan_notlink'));
+  $('#paste').value = found;
+  goPasted();
+});
 $('#paste').addEventListener('keydown', (e) => { if (e.key === 'Enter') goPasted(); });
 $('#ios-copy').addEventListener('click', copyLink);
 $('#ios-go').addEventListener('click', () => $('#ios-warn').classList.add('hidden'));

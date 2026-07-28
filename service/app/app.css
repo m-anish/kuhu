@@ -724,3 +724,72 @@ html[lang='hi'] [data-guide-lang='en'] { display: none; }
   padding: 0.8rem 0.9rem;
   color: var(--dim);
 }
+
+/* ---------- QR codes ---------- */
+/* The SVG carries its own white quiet zone, so the frame only needs to keep it
+   off the page edge and give it a border for light mode, where white-on-cream
+   would otherwise float. */
+.qr {
+  width: 100%;
+  max-width: 240px;
+  margin: 0.9rem auto 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  line-height: 0;
+  background: #fff;
+}
+
+.qr svg { display: block; width: 100%; height: auto; }
+
+/* ---------- camera scanner ---------- */
+.scanner {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+  gap: 1rem;
+}
+
+.scanner video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* A viewfinder, so it is obvious where to aim. Purely decorative. */
+.scan-frame {
+  position: relative;
+  width: min(68vw, 300px);
+  aspect-ratio: 1;
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  border-radius: 18px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+}
+
+.scan-hint {
+  position: relative;
+  color: #fff;
+  text-align: center;
+  font-size: 0.95rem;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  margin: 0;
+}
+
+.scan-cancel { position: relative; max-width: 320px; }
+
+/* The overlay is always black, whatever the page theme is doing, so the cancel
+   button cannot inherit --text — in light mode that is near-black on black. */
+.scanner button.big.ghost {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.7);
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2px);
+}

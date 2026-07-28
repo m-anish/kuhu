@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "kuhu — power cut notices. Cloudflare Worker + D1 + PWA.",
+  "description": "kuhu \u2014 power cut notices. Cloudflare Worker + D1 + PWA.",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
@@ -11,9 +11,14 @@
     "db:seed:local": "wrangler d1 execute kuhu --local --file=seed.sql",
     "db:remote": "wrangler d1 execute kuhu --remote --file=schema.sql",
     "db:seed:remote": "wrangler d1 execute kuhu --remote --file=seed.sql",
-    "vapid": "node tools/gen-vapid.mjs"
+    "vapid": "node tools/gen-vapid.mjs",
+    "vendor:jsqr": "node tools/vendor-jsqr.mjs",
+    "test:qr": "node tools/qr-selftest.mjs"
   },
   "devDependencies": {
+    "esbuild": "^0.28.1",
+    "jsqr": "^1.4.0",
+    "qrcode": "^1.5.4",
     "wrangler": "^4.50.0"
   }
 }

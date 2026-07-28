@@ -19,6 +19,10 @@ The service runs at [kuhuapp.starstucklab.com](https://kuhuapp.starstucklab.com)
 - Posting to **several areas at once** — one act, one row per area tied by a
   batch id, cancelled together, and one notification even for someone who
   follows three of them.
+- **QR codes** next to every invite and every move-to-a-new-phone link, drawn
+  in the browser so the token never travels as a URL parameter — plus a camera
+  scanner inside the app, which exists because the phone's own camera opens
+  Safari and an iOS Home Screen app cannot see Safari's sign-in.
 - **Invite links**: single-use, expiring, role baked in by the admin, shared
   over WhatsApp. No codes, no passwords.
 - **Admins**: invite, remove, manage which areas a crew covers. Nobody may

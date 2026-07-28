@@ -7,6 +7,8 @@
 // because those belong to the service rather than to this file.
 
 import { STRINGS, pickLang, setLang, fmtWindow, localToIso, isoToLocalInput, parseInviteToken, initTheme, initVersion } from '/i18n.js';
+import { qrSvg } from '/qr.js';
+import { scanSupported, openScanner } from '/scan.js';
 
 let lang = pickLang();
 let token = localStorage.getItem('kuhu.token') || '';
@@ -415,6 +417,14 @@ function paintInviteTarget() {
   }
 }
 
+/** Draw a link as a QR beside it. Encoding happens here in the page — sending
+ *  the token to a QR service would put a live credential in someone's logs. */
+function paintQr(sel, url, label) {
+  const box = document.querySelector(sel);
+  if (!box) return;
+  box.innerHTML = qrSvg(url, { ecl: 'M', label });
+}
+
 async function makeInvite() {
   const btn = $('#make-invite');
   btn.disabled = true;
@@ -432,6 +442,7 @@ async function makeInvite() {
     const data = await res.json();
     lastInviteUrl = data.url;
     $('#invite-url').textContent = data.url;
+    paintQr('#invite-qr', data.url, t('qr_alt'));
     $('#invite-result').classList.remove('hidden');
     $('#invite-note').value = '';
     say(t('link_ready'), 'ok');
@@ -747,6 +758,7 @@ async function makeMove() {
     if (!res.ok) return say((await res.json().catch(() => ({}))).error || 'error', 'bad');
     moveUrl = (await res.json()).url;
     $('#move-url').textContent = moveUrl;
+    paintQr('#move-qr', moveUrl, t('qr_alt'));
     $('#move-result').classList.remove('hidden');
   } finally {
     btn.disabled = false;
@@ -781,6 +793,23 @@ $('#paste-go').addEventListener('click', () => {
   location.href = `/join#t=${found}`;
 });
 $('#paste').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#paste-go').click(); });
+
+// Only offered where it can actually work — no camera, or an insecure origin,
+// and the button would be a dead end rather than a choice.
+if (scanSupported()) $('#scan').classList.remove('hidden');
+$('#scan').addEventListener('click', async () => {
+  let text;
+  try {
+    text = await openScanner(t);
+  } catch (err) {
+    return say(t(err.message) || t('scan_failed'), 'bad');
+  }
+  if (text === null) return;                     // backed out
+  // Never navigate to what was scanned: take a token from it or nothing.
+  const found = parseInviteToken(text);
+  if (!found) return say(t('scan_notlink'), 'bad');
+  location.href = `/join#t=${found}`;
+});
 $('#publish').addEventListener('click', publish);
 $('#signout').addEventListener('click', signOut);
 $('#make-invite').addEventListener('click', makeInvite);

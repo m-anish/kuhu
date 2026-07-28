@@ -43,7 +43,8 @@
       <label class="field">
         <input id="paste" autocapitalize="none" spellcheck="false" enterkeyhint="go">
       </label>
-      <button id="paste-go" class="big" type="button" data-s="paste_go">Continue</button>
+      <button id="scan" class="big hidden" type="button" data-s="scan_open">Scan a code</button>
+      <button id="paste-go" class="big ghost" type="button" data-s="paste_go">Continue</button>
     </div>
   </section>
 
@@ -149,6 +150,10 @@
 
           <div id="invite-result" class="hidden result">
             <div class="linkbox" id="invite-url"></div>
+            <!-- Rendered in the browser, never fetched: the token must not
+                 travel as a URL parameter into anyone's request logs. -->
+            <div class="qr" id="invite-qr"></div>
+            <p class="hint-p" data-s="qr_invite_hint"></p>
             <button id="share-wa" class="big" type="button" data-s="share_whatsapp">Share on WhatsApp</button>
             <button id="copy-link" class="big ghost" type="button" data-s="copy_link">Copy link</button>
           </div>
@@ -254,6 +259,8 @@
         <button id="move" class="big ghost" type="button" data-s="move_make">Move me to a new phone</button>
         <div id="move-result" class="hidden result">
           <div class="linkbox" id="move-url"></div>
+          <div class="qr" id="move-qr"></div>
+          <p class="hint-p" data-s="qr_move_hint"></p>
           <p class="hint-p" data-s="move_warn"></p>
           <button id="move-share" class="big" type="button" data-s="share_whatsapp">Share on WhatsApp</button>
           <button id="move-copy" class="big ghost" type="button" data-s="copy_link">Copy link</button>

@@ -6,13 +6,14 @@ modules, served straight off the Worker's asset binding.
 
 Live: **https://kuhuapp.starstucklab.com**
 
-## The two faces
+## The faces
 
 | Path | Who | What |
 |---|---|---|
 | `/` | Households | Pick areas, allow notifications, see what's coming. |
 | `/post` | A crew | Post notices; admins also manage people, coverage and areas. |
 | `/join` | Anyone invited | Where an invite link lands. Used once, then dead. |
+| `/help` | Whoever is signed in | Three role guides; you are shown the one for your role. |
 
 ## How a poster joins
 
@@ -22,6 +23,11 @@ the Admin section of `/post`, picks the role the person will have, and shares it
 sees which team is inviting them and as what, types their name, and is in. Their
 role was decided by the admin before the link existed; there is nothing for them
 to choose or get wrong.
+
+The same link is also drawn as a **QR code** beside it, for when the new person
+is standing in front of you rather than on WhatsApp. It is encoded in the
+browser, never fetched: a server-rendered QR would mean the invite token
+travelling as a URL parameter into somebody's request logs.
 
 An invite dies on **first use**, and separately on expiry (24h / 2 days / 7 days,
 admin's choice), and can be cancelled before either. The token rides in the URL
@@ -54,8 +60,42 @@ same person, same role, same history — and the old phone is signed out the
 instant it's used. No admin errand, and nothing to recover, because there was
 never a password.
 
+This is the flow QR suits best: both phones are in the same pair of hands, so
+the old one shows the code and the new one scans it. Nothing is sent anywhere,
+and nobody types a token.
+
 Losing a phone entirely is still the admin's job: remove the person (which kills
 the token immediately) and send them a fresh invite.
+
+## Scanning
+
+`/join` and the signed-out `/post` offer **Scan a code**, which is not as
+redundant as it looks. Every phone's camera app already reads QR codes — but it
+opens the link in *Safari*, and on iOS a Home Screen app keeps storage separate
+from Safari, so a token that lands there is invisible to the installed kuhu.
+That is the same isolation the paste-a-link box exists to work around. Scanning
+from inside the app puts the token where it is needed.
+
+Two decoders, preferred in order:
+
+| Decoder | Cost | Where |
+|---|---|---|
+| `BarcodeDetector` | none, it's native | Chrome / Android |
+| `jsQR` (vendored) | ~47 KB gzipped, fetched on first tap | everywhere else, i.e. iOS |
+
+The vendored copy is deliberately **not** in the service worker's precache, so
+it costs nothing for the people who never scan. Regenerate it with
+`npm run vendor:jsqr`, which records the upstream version and SHA-256 in the
+file's banner so the committed bundle can be audited rather than trusted.
+
+Scanned text is never navigated to. It goes to `parseInviteToken`, which yields
+a token or nothing, so a QR code found on a wall cannot send anyone anywhere —
+and the server still has to agree the token is real.
+
+The encoder is ours (`app/qr.js`, byte mode, versions 1-40). `npm run test:qr`
+checks it two ways: every code round-trips through the vendored decoder, and
+every matrix is compared module-for-module against `qrcode@1.5.4` including
+mask choice.
 
 ## Where a notice goes
 

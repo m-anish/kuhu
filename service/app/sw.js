@@ -6,10 +6,13 @@
 // a third-party push service, and the payload cannot go stale between send
 // and delivery.
 
-const CACHE = 'kuhu-shell-v21';
+const CACHE = 'kuhu-shell-v22';
 // Canonical paths only — the asset server redirects /index.html and /post.html
 // to these, and a cached redirect is worse than no cache at all.
-const SHELL = ['/', '/post', '/join', '/help', '/app.css', '/i18n.js', '/subscribe.js', '/post.js', '/join.js', '/help.js', '/version.js', '/icon.svg', '/icon-192.png'];
+// The vendored decoder is deliberately absent: it is ~47 KB gzipped and only
+// wanted by whoever taps Scan. The asset strategy below caches it once fetched,
+// so it costs nothing for everyone else and is instant the second time.
+const SHELL = ['/', '/post', '/join', '/help', '/app.css', '/i18n.js', '/subscribe.js', '/post.js', '/join.js', '/help.js', '/qr.js', '/scan.js', '/version.js', '/icon.svg', '/icon-192.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

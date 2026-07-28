@@ -111,6 +111,11 @@ was.
   (which is where this crew already lives), and it dies on first use. The
   burden sits with the admin, which is the right place for it: they know their
   own crew, so they are the identity check. Only hashes are stored.
+- *Handing a link over in person* → **QR**, drawn in the browser next to the
+  link. The reason to scan it from inside kuhu rather than with the phone's own
+  camera is narrow but real: the camera opens Safari, and an iOS Home Screen app
+  does not share Safari's storage, so the token would land where the app cannot
+  see it. Scanned text is only ever mined for a token, never followed.
 - *Roles* → `poster`, `service_admin`, `site_admin`. Admins invite, remove and
   manage coverage; only a site admin edits geography, because areas are shared
   by every service. Three server-side invariants stop anyone locking anyone

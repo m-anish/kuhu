@@ -13,10 +13,13 @@ CREATE TABLE IF NOT EXISTS teams (
 
 CREATE TABLE IF NOT EXISTS regions (
   id      INTEGER PRIMARY KEY,
-  slug    TEXT NOT NULL UNIQUE,               -- e.g. 'ward-3'; permanent once anyone subscribes
+  slug    TEXT NOT NULL UNIQUE,               -- e.g. 'naddi'; permanent once anyone subscribes
   name_en TEXT NOT NULL,
   name_hi TEXT NOT NULL,
-  team_id INTEGER NOT NULL REFERENCES teams(id)
+  team_id INTEGER NOT NULL REFERENCES teams(id),
+  -- When this area's retained MQTT payload stops being true. The scheduled
+  -- job clears the topic after this; NULL means nothing is retained.
+  mqtt_retained_until TEXT
 );
 
 CREATE TABLE IF NOT EXISTS posters (

@@ -19,6 +19,8 @@
 
 * { box-sizing: border-box; }
 
+a { color: var(--sage); }
+
 html, body {
   margin: 0;
   padding: 0;
@@ -298,6 +300,114 @@ p.hint-p {
 .row button.mini:hover { color: var(--alarm); border-color: var(--alarm); }
 
 .rename-form { flex-basis: 100%; margin-top: 0.7rem; }
+
+/* ---------- accordion sections ----------
+   <details> rather than a JS tab widget: it is keyboard-operable and
+   screen-reader-correct out of the box, and it degrades to "everything
+   visible" if scripting fails. */
+.acc {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 0.7rem;
+  overflow: hidden;
+}
+
+.acc > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1rem 1.1rem;
+  min-height: 3.4rem;             /* comfortable thumb target */
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 1.02rem;
+  list-style: none;               /* we draw our own marker */
+  user-select: none;
+}
+
+.acc > summary::-webkit-details-marker { display: none; }
+
+/* chevron, rotated when open. No translate — it would be applied in rotated
+   space and land differently at each angle. */
+.acc > summary::after {
+  content: '';
+  margin-left: auto;
+  margin-bottom: 0.22rem;          /* optical centring for the closed state */
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid var(--dim);
+  border-bottom: 2px solid var(--dim);
+  transform: rotate(45deg);
+  transition: transform 0.18s ease, margin 0.18s ease;
+  flex: none;
+}
+
+.acc[open] > summary::after {
+  transform: rotate(-135deg);
+  margin-bottom: 0;
+  margin-top: 0.22rem;
+}
+.acc[open] > summary { border-bottom: 1px solid var(--border); }
+
+.acc > summary:focus-visible {
+  outline: 2px solid var(--sage);
+  outline-offset: -2px;
+}
+
+.acc-count {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--mute);
+  font-weight: 400;
+}
+
+.acc-body { padding: 1rem 1.1rem 1.25rem; }
+
+/* h4 as an in-panel subheading — quieter than the page's h2/h3 */
+.acc-body h4 {
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: var(--mute);
+  margin: 1.6rem 0 0.7rem;
+}
+
+.acc-body > h4:first-child { margin-top: 0; }
+.acc-body .result { margin-top: 1rem; }
+
+.rule {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1.5rem 0 1.2rem;
+}
+
+/* ---------- other ways to hear (subscriber face) ---------- */
+.ways { margin-top: 2.4rem; }
+
+.way {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 0.7rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+a.way:hover { border-color: color-mix(in srgb, var(--sage) 55%, transparent); }
+
+.way strong { display: flex; align-items: center; gap: 0.5rem; font-size: 0.98rem; }
+.way strong .tg { color: #2aabee; font-size: 1.1rem; }
+.way p { color: var(--dim); font-size: 0.88rem; margin: 0.4rem 0 0; }
+.way code {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--amber);
+  word-break: break-all;
+}
 
 /* a caution the reader should not be able to skim past */
 .warnbox {

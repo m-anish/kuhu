@@ -35,6 +35,7 @@ async function loadRegions() {
   regions = (await res.json()).regions || [];
   paintRegions();
   paintUpcoming();
+  paintApiExample();
 }
 
 function paintRegions() {
@@ -52,10 +53,19 @@ function paintRegions() {
       localStorage.setItem('kuhu.regions', JSON.stringify([...chosen]));
       b.setAttribute('aria-pressed', String(chosen.has(r.slug)));
       paintUpcoming();
+      paintApiExample();
       if (currentSubscription) syncSubscription(currentSubscription);   // keep push in step
     });
     box.append(b);
   }
+}
+
+/** Point the "see the JSON" link at an area the reader actually cares about. */
+function paintApiExample() {
+  const link = $('#api-example');
+  if (!link) return;
+  const slug = [...chosen][0] || regions[0]?.slug;
+  link.href = slug ? `/api/regions/${slug}/next-cuts` : '/api/regions';
 }
 
 // ---------- what's coming ----------

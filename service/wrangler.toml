@@ -21,6 +21,11 @@ directory = "./app"
 binding = "ASSETS"
 run_worker_first = ["/api/*"]
 
+# Hourly: clear retained MQTT payloads whose window has passed, so a device
+# booting next week isn't told about last Tuesday's cut.
+[triggers]
+crons = ["0 * * * *"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "kuhu"

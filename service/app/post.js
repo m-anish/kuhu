@@ -384,6 +384,9 @@ async function loadMembers() {
   const res = await api('/api/team/members');
   if (!res.ok) return;
   const { members } = await res.json();
+  // Summary count, so an admin knows what's inside without opening it.
+  const active = members.filter((m) => !m.revoked_at).length;
+  $('#count-people').textContent = String(active);
   box.textContent = '';
   for (const m of members) {
     const el = document.createElement('div');
@@ -421,6 +424,7 @@ async function loadMembers() {
 
 function paintAreasAdmin() {
   const box = $('#areas-admin');
+  $('#count-areas').textContent = String(areas.length);
   box.textContent = '';
   for (const a of areas) {
     const el = document.createElement('div');

@@ -48,7 +48,37 @@ export default {
       return json({ error: 'server_error' }, 500);
     }
   },
+
+  /**
+   * Hourly tidying. A retained MQTT payload outlives the cut it describes, so
+   * a device booting next week would otherwise be told about last Tuesday.
+   * Clear the topics whose window has passed, and only those — republishing
+   * live ones would wake every connected device for no news.
+   */
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(clearExpiredRetained(env));
+  },
 };
+
+async function clearExpiredRetained(env) {
+  if (!env.MQTT_URL) return;
+  const { results: stale } = await env.DB.prepare(
+    `SELECT id, slug FROM regions
+     WHERE mqtt_retained_until IS NOT NULL
+       AND datetime(mqtt_retained_until) < datetime('now')`,
+  ).all();
+  if (stale.length === 0) return;
+
+  // An empty retained payload is how MQTT says "forget what I told you".
+  const res = await publishMqtt(env, stale.map((r) => [topicFor(r.slug), '']));
+  if (!res.ok) return;                       // leave the marks; try again next hour
+
+  for (const r of stale) {
+    await env.DB.prepare('UPDATE regions SET mqtt_retained_until = NULL WHERE id = ?1')
+      .bind(r.id).run();
+  }
+  console.log(`cleared retained state for ${stale.length} area(s)`);
+}
 
 async function route(request, env, ctx, url) {
   const db = env.DB;
@@ -515,6 +545,15 @@ async function fanOut(db, env, regions, notice) {
     // Retained, per area — a device that boots later still learns the state.
     publishMqtt(env, regions.map((r) => [topicFor(r.slug), state])),
   ]);
+
+  // Remember when this retained payload stops being true, so the scheduled
+  // job can clear it rather than leaving stale weather on the topic.
+  if (env.MQTT_URL) {
+    for (const r of regions) {
+      await db.prepare('UPDATE regions SET mqtt_retained_until = ?2 WHERE id = ?1')
+        .bind(r.id, notice.to).run();
+    }
+  }
 }
 
 /**

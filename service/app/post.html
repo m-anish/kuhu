@@ -78,75 +78,95 @@
     <div id="mine"></div>
 
     <!-- ============ ADMIN (role=admin only) ============ -->
+    <!-- Collapsed by default: the crew's job is posting notices, and admin work
+         happens a few times a year. <details> gives keyboard and screen-reader
+         behaviour for free, and costs no JavaScript. -->
     <section id="admin-view" class="hidden">
       <h2 data-s="admin">Admin</h2>
 
-      <div class="panel">
-        <h3 data-s="invite_someone">Invite someone</h3>
-        <label class="field">
-          <span data-s="invite_as">Joining as</span>
-          <div id="invite-role" class="chips"></div>
-        </label>
-        <label class="field">
-          <span data-s="invite_note">Note to yourself (optional)</span>
-          <input id="invite-note">
-        </label>
-        <label class="field">
-          <span data-s="invite_valid">Link works for</span>
-          <div id="invite-hours" class="chips"></div>
-        </label>
-        <button id="make-invite" class="big" type="button" data-s="make_link">Make invite link</button>
+      <details class="acc" id="acc-people">
+        <summary>
+          <span class="acc-title" data-s="people">People</span>
+          <span class="acc-count" id="count-people"></span>
+        </summary>
+        <div class="acc-body">
 
-        <div id="invite-result" class="hidden" style="margin-top:1rem">
-          <div class="linkbox" id="invite-url"></div>
-          <button id="share-wa" class="big" type="button" data-s="share_whatsapp">Share on WhatsApp</button>
-          <button id="copy-link" class="big ghost" type="button" data-s="copy_link">Copy link</button>
+          <h4 data-s="members">Your team</h4>
+          <div id="members"></div>
+
+          <h4 data-s="invite_someone">Invite someone</h4>
+          <label class="field">
+            <span data-s="invite_as">Joining as</span>
+            <div id="invite-role" class="chips"></div>
+          </label>
+          <label class="field">
+            <span data-s="invite_valid">Link works for</span>
+            <div id="invite-hours" class="chips"></div>
+          </label>
+          <label class="field">
+            <span data-s="invite_note">Note to yourself (optional)</span>
+            <input id="invite-note" placeholder="">
+          </label>
+          <button id="make-invite" class="big" type="button" data-s="make_link">Make invite link</button>
+
+          <div id="invite-result" class="hidden result">
+            <div class="linkbox" id="invite-url"></div>
+            <button id="share-wa" class="big" type="button" data-s="share_whatsapp">Share on WhatsApp</button>
+            <button id="copy-link" class="big ghost" type="button" data-s="copy_link">Copy link</button>
+          </div>
+
+          <h4 data-s="open_invites">Invite links</h4>
+          <div id="invites"></div>
         </div>
-      </div>
+      </details>
 
-      <h3 data-s="open_invites">Invite links</h3>
-      <div id="invites"></div>
+      <details class="acc" id="acc-areas">
+        <summary>
+          <span class="acc-title" data-s="areas_admin">Areas</span>
+          <span class="acc-count" id="count-areas"></span>
+        </summary>
+        <div class="acc-body">
+          <div id="areas-admin"></div>
 
-      <h3 data-s="members">Your team</h3>
-      <div id="members"></div>
-
-      <h3 data-s="areas_admin">Areas</h3>
-      <div id="areas-admin"></div>
-
-      <div class="panel" style="margin-top:1rem">
-        <h3 data-s="add_area">Add an area</h3>
-        <label class="field">
-          <span data-s="area_en">Name in English</span>
-          <input id="new-en">
-        </label>
-        <label class="field">
-          <span data-s="area_hi">नाम (हिंदी)</span>
-          <input id="new-hi">
-        </label>
-        <label class="field">
-          <span data-s="area_slug">Short id (permanent)</span>
-          <input id="new-slug" autocapitalize="none" spellcheck="false">
-          <small class="hint" data-s="area_slug_help"></small>
-        </label>
-        <button id="add-area" class="big" type="button" data-s="save_area">Add area</button>
-      </div>
+          <h4 data-s="add_area">Add an area</h4>
+          <label class="field">
+            <span data-s="area_en">Name in English</span>
+            <input id="new-en">
+          </label>
+          <label class="field">
+            <span data-s="area_hi">नाम (हिंदी)</span>
+            <input id="new-hi">
+          </label>
+          <label class="field">
+            <span data-s="area_slug">Short id (permanent)</span>
+            <input id="new-slug" autocapitalize="none" spellcheck="false">
+            <small class="hint" data-s="area_slug_help"></small>
+          </label>
+          <button id="add-area" class="big" type="button" data-s="save_area">Add area</button>
+        </div>
+      </details>
     </section>
 
-    <div class="panel" style="margin-top:2rem">
-      <h3 data-s="move_title_alt">New phone, or the Home Screen app?</h3>
-      <p class="hint-p" data-s="move_help_alt"></p>
-      <button id="move" class="big ghost" type="button" data-s="move_make">Move me to a new phone</button>
-      <div id="move-result" class="hidden" style="margin-top:1rem">
-        <div class="linkbox" id="move-url"></div>
-        <p class="hint-p" data-s="move_warn"></p>
-        <button id="move-share" class="big" type="button" data-s="share_whatsapp">Share on WhatsApp</button>
-        <button id="move-copy" class="big ghost" type="button" data-s="copy_link">Copy link</button>
-      </div>
-    </div>
+    <!-- ============ THIS PHONE (everyone) ============ -->
+    <details class="acc">
+      <summary>
+        <span class="acc-title" data-s="this_phone">This phone</span>
+      </summary>
+      <div class="acc-body">
+        <h4 data-s="move_title_alt">New phone, or the Home Screen app?</h4>
+        <p class="hint-p" data-s="move_help_alt"></p>
+        <button id="move" class="big ghost" type="button" data-s="move_make">Move me to a new phone</button>
+        <div id="move-result" class="hidden result">
+          <div class="linkbox" id="move-url"></div>
+          <p class="hint-p" data-s="move_warn"></p>
+          <button id="move-share" class="big" type="button" data-s="share_whatsapp">Share on WhatsApp</button>
+          <button id="move-copy" class="big ghost" type="button" data-s="copy_link">Copy link</button>
+        </div>
 
-    <p style="margin-top:1.4rem">
-      <button id="signout" class="big ghost" type="button" data-s="sign_out">Sign out of this phone</button>
-    </p>
+        <hr class="rule">
+        <button id="signout" class="big ghost" type="button" data-s="sign_out">Sign out of this phone</button>
+      </div>
+    </details>
   </section>
 
 

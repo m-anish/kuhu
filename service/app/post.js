@@ -178,8 +178,21 @@ function paintQuick() {
       const [from, to] = mk();
       $('#from').value = isoToLocalInput(from);
       $('#to').value = isoToLocalInput(to);
+      // The preset is a shortcut; these two fields are what actually gets
+      // posted, so show that the shortcut landed in them.
+      flashFields();
     });
     box.append(b);
+  }
+}
+
+/** Briefly highlight the start/end inputs — they are the real answer. */
+function flashFields() {
+  for (const id of ['#from', '#to']) {
+    const el = $(id);
+    el.classList.remove('just-set');
+    void el.offsetWidth;              // restart the animation
+    el.classList.add('just-set');
   }
 }
 
@@ -263,6 +276,8 @@ async function loadMine() {
   if (!res.ok) return;
   const { notices } = await res.json();
   box.textContent = '';
+  const live = notices?.filter((n) => n.status === 'scheduled').length ?? 0;
+  $('#count-mine').textContent = live ? String(live) : '';
   if (!notices?.length) { box.innerHTML = `<p class="empty">${escapeHtml(t('none_upcoming'))}</p>`; return; }
 
   const groups = [];
@@ -317,6 +332,11 @@ function paintAdmin() {
   loadMembers();
   paintCoverage();
   if (can.manage_areas) loadAllAreas();
+  // Say plainly what this admin's reach is, so the sections below are read in
+  // the right scope rather than assumed to be site-wide.
+  $('#admin-scope').textContent = me.role === 'site_admin'
+    ? t('scope_site')
+    : t('scope_service').replace('{service}', me.services.map((x) => name(x)).join(', '));
   $('#acc-services').classList.toggle('hidden', !can.manage_services);
   if (can.manage_services) { paintServicesAdmin(); ensureVocabRows(); }
 }
@@ -333,7 +353,7 @@ function paintInviteControls() {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'chip';
-    b.textContent = t(`role_${r}`);
+    b.textContent = t(`pick_${r}`);
     b.setAttribute('aria-pressed', String(inviteSel.role === r));
     b.addEventListener('click', () => { inviteSel.role = r; paintInviteControls(); });
     roleBox.append(b);

@@ -49,7 +49,13 @@
 
   <!-- ============ POST ============ -->
   <section id="post-view" class="hidden">
-    <h1 data-s="post_title">Post a notice.</h1>
+    <!-- The daily job, and the only card open when you arrive. Everything
+         below it is occasional. -->
+    <details class="acc" id="acc-post" open>
+      <summary>
+        <span class="acc-title" data-s="post_title">Post a notice</span>
+      </summary>
+      <div class="acc-body">
     <p class="lede" data-s="post_lede"></p>
 
     <!-- Only rendered when this person reaches more than one service. -->
@@ -86,9 +92,19 @@
     </label>
 
     <button id="publish" class="big" type="button" data-s="publish">Publish notice</button>
+      </div>
+    </details>
 
-    <h2 data-s="your_notices">Your recent notices</h2>
-    <div id="mine"></div>
+    <!-- Recent notices: open, because cancelling one is time-critical. -->
+    <details class="acc" id="acc-mine" open>
+      <summary>
+        <span class="acc-title" data-s="your_notices">Recent notices</span>
+        <span class="acc-count" id="count-mine"></span>
+      </summary>
+      <div class="acc-body">
+        <div id="mine"></div>
+      </div>
+    </details>
 
     <!-- ============ ADMIN (role=admin only) ============ -->
     <!-- Collapsed by default: the crew's job is posting notices, and admin work
@@ -96,6 +112,7 @@
          behaviour for free, and costs no JavaScript. -->
     <section id="admin-view" class="hidden">
       <h2 data-s="admin">Admin</h2>
+      <p class="hint-p" id="admin-scope"></p>
 
       <details class="acc" id="acc-people">
         <summary>
@@ -249,9 +266,14 @@
   </div>
 
   <div class="foot">
-    <span id="version" class="version"></span>
     <a href="/" data-s="subscribe_link">Subscribe instead</a>
     <span id="who"></span>
+  </div>
+
+  <div class="footlinks">
+    <a href="https://kuhu.starstucklab.com" target="_blank" rel="noopener" data-s="foot_site">About kuhu</a>
+    <a href="https://github.com/m-anish/kuhu" target="_blank" rel="noopener" data-s="foot_repo">Source on GitHub</a>
+    <span id="version" class="version"></span>
   </div>
 
 </div>

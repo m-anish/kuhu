@@ -234,6 +234,19 @@ input:focus, select:focus, textarea:focus {
 
 textarea { min-height: 4.5rem; resize: vertical; }
 
+/* A quick preset writes into the two date fields; this says so, briefly.
+   Respects a reduced-motion preference by simply not animating. */
+@keyframes just-set {
+  from { border-color: var(--sage); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sage) 30%, transparent); }
+  to   { border-color: var(--border); box-shadow: 0 0 0 0 transparent; }
+}
+
+.just-set { animation: just-set 1.1s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .just-set { animation: none; border-color: var(--sage); }
+}
+
 button.big {
   appearance: none;
   width: 100%;
@@ -608,6 +621,22 @@ a.way:hover { border-color: color-mix(in srgb, var(--sage) 55%, transparent); }
 }
 
 .foot a { color: var(--dim); }
+
+/* Links and version on their own line, right-aligned, well clear of the
+   Subscribe/Team-login control above — that one is a destination, these are
+   reference. */
+.footlinks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.9rem;
+  margin-top: 0.7rem;
+  font-size: 0.78rem;
+}
+
+.footlinks a { color: var(--mute); text-decoration: none; }
+.footlinks a:hover { color: var(--dim); text-decoration: underline; }
 
 /* Subtle by design — until it isn't. Normally just "v2026.07.28-1" in the
    footer; when the server is ahead it becomes a tappable way out of a stale

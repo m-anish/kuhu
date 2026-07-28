@@ -160,6 +160,10 @@ html, body {
   background: var(--surface);
 }
 
+/* "EN" / "हिं" rather than the full words: the masthead has to hold a brand,
+   a beta pill, a language switch and a theme button on a 360px screen. The
+   full names live in aria-label and title, so nothing is lost to a screen
+   reader or a long-press. */
 .lang button {
   appearance: none;
   border: 0;
@@ -167,9 +171,14 @@ html, body {
   color: var(--dim);
   font: inherit;
   font-size: 0.85rem;
-  padding: 0.45rem 1.1rem;
+  font-weight: 500;
+  min-width: 2.9rem;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.55rem;
   cursor: pointer;
 }
+
+.lang button:focus-visible { outline: 2px solid var(--sage); outline-offset: -2px; }
 
 .lang button[aria-pressed='true'] {
   background: var(--sage);

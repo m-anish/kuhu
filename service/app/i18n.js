@@ -415,7 +415,7 @@ export function fmtWindow(fromIso, toIso, lang) {
   const locale = lang === 'hi' ? 'hi-IN' : 'en-IN';
   const from = new Date(fromIso);
   const to = new Date(toIso);
-  const day = new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric', month: 'short', timeZone: IST });
+  const day = new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric', month: 'long', timeZone: IST });
   const time = new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: IST });
   const sameDay = day.format(from) === day.format(to);
   const word = STRINGS[lang].to;

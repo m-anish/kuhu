@@ -101,6 +101,14 @@ Cloudflare Workers + D1 (+ KV for push subscriptions), one PWA with two faces
 - *Renaming areas* → admins can change display names freely; the slug is
   immutable because it is in the public API URL and in every subscriber's saved
   selection.
+- *Where a poster's reach comes from* → **their team, and only their team.**
+  A poster may post to their team's regions plus every descendant team's. Reach
+  is deliberately **not** derived from a region hierarchy as well. Two sources
+  of authority can disagree — a lineman in a district crew who should somehow
+  only reach three villages — and then every permission question needs a
+  tie-break rule that someone has to hold in their head. One rule, one place.
+  If areas ever nest (see [roadmap.md](roadmap.md)), that tree governs who
+  *hears* a notice, never who may *post* one.
 - *Subscriber region discovery* → a plain list of regions, chosen as chips.
   Fine at three wards; revisit if a district's worth ever appears at once.
 

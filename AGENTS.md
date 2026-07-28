@@ -45,9 +45,14 @@ which lives at `../starstucklab` on disk alongside the sibling spokes
 ## Guardrails
 
 - Don't invent engineering that hasn't happened. The status line is honest
-  about what is built versus merely intended ("Season 1 · First call": service
-  works, no real crew yet, no MQTT, no Telegram) — keep it that way when things
-  change.
+  about what is built versus merely intended ("Season 1 · First call": service,
+  admin role, Telegram mirror and MQTT all work; there is still no real crew
+  using it) — keep it that way when things change.
+- **A poster's reach comes from their team, and only their team** — their
+  team's regions plus every descendant team's. Do not add a second source of
+  authority from the region side, even if areas gain a parent/child tree later:
+  two sources can disagree and then every permission question needs a tie-break
+  someone has to remember. The reasoning is in `docs/concept.md`.
 - Don't edit sibling repos from here (the hub card is the one exception, done
   from `../starstucklab`).
 - Hindi copy is a first-class deliverable, not a translation afterthought —

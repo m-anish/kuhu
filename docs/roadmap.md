@@ -92,9 +92,34 @@ table (one person, many devices) rather than a single `token_hash`.
 revocation stops them. A lost-and-unreported phone therefore keeps working.
 Fine at this size, wrong at ten times this size.
 
+**Nested areas (state → district → area).** Cheap in the schema: one
+`regions.parent_id` column and the same recursive CTE already running in
+production for nested teams. Notices would still attach to a leaf area; the
+tree would only change who *hears* about one.
+
+The valuable half is **hierarchical subscribing** — pick "Kangra", get
+everything beneath it. One subtlety decides whether it works: the expansion has
+to happen at *notify* time, not at subscribe time. Expanding when someone
+subscribes would freeze their selection, so an area added under Kangra next
+year would reach nobody who had already subscribed. Walk *up* from the notice's
+area to its ancestors instead, and match subscriptions against that set. The
+`SELECT DISTINCT` fan-out written for multi-area notices already protects the
+one-buzz promise here — somebody subscribed to both Kangra and Naddi must still
+get exactly one notification — and that is the first thing to regression-test.
+
+**Settled, so don't re-litigate it:** poster reach stays derived from the team
+tree alone, never from the region tree. See [concept.md](concept.md).
+
+**The real cost is not the schema, it is the interface.** Six chips on one
+screen is a good interface for a lineman in the rain. A state → district → area
+tree on a 360px phone, for readers who may not read comfortably, is a hard
+design problem, and it — not the SQL — decides whether this feature helps or
+just makes the app worse. Watch a real person use it before building.
+
 **Area discovery at scale.** Six chips are a fine interface. Sixty are not — a
 district would need search, or a map, or "enter the code on the pole outside
-your house".
+your house". Closely related to the tree above, and probably the same piece of
+work.
 
 **More than one crew.** The schema already nests teams and the recursive scope
 query is tested, but nothing in the UI creates a team or moves an area between

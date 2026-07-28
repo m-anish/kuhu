@@ -526,7 +526,8 @@ async function route(request, env, ctx, url) {
     const marks = teams.map((_, i) => `?${i + 1}`).join(',');
     const { results } = await db.prepare(
       `SELECT p.id, p.name, p.phone, p.role, p.created_at, p.revoked_at,
-              t.name AS team_name, s.name_en AS service_en, s.name_hi AS service_hi, s.icon
+              t.name AS team_name, s.slug AS service_slug,
+              s.name_en AS service_en, s.name_hi AS service_hi, s.icon
        FROM posters p
        JOIN teams t ON t.id = p.team_id
        LEFT JOIN services s ON s.id = p.service_id
@@ -562,6 +563,57 @@ async function route(request, env, ctx, url) {
     }
     await db.prepare("UPDATE posters SET revoked_at = datetime('now') WHERE id = ?1").bind(id).run();
     return json({ id, state: 'revoked' });
+  }
+
+  // Change a poster's areas after they have joined.
+  //
+  // Same model as the invite that created them: areas resolve to a crew, and
+  // the person moves to it. Editing team_regions directly would have quietly
+  // changed the areas of everyone else in that crew, which is the sort of thing
+  // an admin finds out about later and from someone else.
+  const memberAreas = path.match(/^\/api\/team\/members\/(\d+)\/areas$/);
+  if (method === 'POST' && memberAreas) {
+    if (!me) return unauthorized();
+    if (!isAdmin(me)) return forbidden('admin only');
+    const id = Number(memberAreas[1]);
+    const teams = await teamTree(db, me.team_id);
+    const target = await db.prepare(
+      `SELECT p.id, p.role, p.team_id, p.service_id, s.slug AS service_slug
+       FROM posters p LEFT JOIN services s ON s.id = p.service_id
+       WHERE p.id = ?1 AND p.revoked_at IS NULL`,
+    ).bind(id).first();
+    if (!target || !teams.includes(target.team_id)) return notFound();
+    if (rank(target.role) > rank(me.role)) return forbidden('above your own role');
+    // Admins are not scoped by area — a service admin covers their service and
+    // a site admin covers everything — so there is nothing here to set.
+    if (target.role !== 'poster') return badRequest('only a poster is limited to areas');
+    if (!target.service_slug) return badRequest('that person is not attached to a service');
+
+    const body = await request.json().catch(() => null);
+    const picked = [...new Set((Array.isArray(body?.areas) ? body.areas : []).map(String))];
+    if (!picked.length) return badRequest('pick at least one area');
+
+    const svc = await myService(db, me, target.service_slug);
+    if (!svc) return forbidden('not your service');
+    const reach = coverageByService(await scopedCoverage(db, me.team_id))
+      .find((c) => c.slug === svc.slug);
+    const mine = new Set((reach?.regions ?? []).map((r) => r.slug));
+    if (picked.some((slug) => !mine.has(slug))) return forbidden('not your area');
+
+    const marks = picked.map((_, i) => `?${i + 2}`).join(',');
+    const { results: rows } = await db.prepare(
+      `SELECT id, slug, name_en, parent_id FROM regions WHERE service_id = ?1 AND slug IN (${marks})`,
+    ).bind(svc.id, ...picked).all();
+    if (rows.length !== picked.length) return badRequest('no such area');
+
+    const root = await serviceRootTeam(db, svc.id);
+    if (!root) return badRequest('that service has no root team');
+    const top = await topmostRegions(db, rows);
+    const crew = await crewForCoverage(db, root.id, svc.id, top.map((r) => r.id),
+      top.map((r) => r.name_en).join(' · ').slice(0, 60) || 'Crew');
+    await db.prepare('UPDATE posters SET team_id = ?2 WHERE id = ?1').bind(id, crew).run();
+    const team = await db.prepare('SELECT name FROM teams WHERE id = ?1').bind(crew).first();
+    return json({ id, team: team?.name ?? '', areas: top.map((r) => r.slug) });
   }
 
   // Areas belong to a service, so a service admin owns their own. A site admin
@@ -974,7 +1026,8 @@ async function coveringTeam(db, me, serviceId) {
   const row = await db.prepare(
     `SELECT id FROM teams
      WHERE service_id = ?1 AND id IN (${marks})
-     ORDER BY (parent_id = 900) ASC, id DESC LIMIT 1`,
+     ORDER BY (parent_id = (SELECT id FROM teams WHERE parent_id IS NULL ORDER BY id LIMIT 1)) ASC,
+              id DESC LIMIT 1`,
   ).bind(serviceId, ...inTree).first();
   return row?.id ?? null;
 }

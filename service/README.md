@@ -127,6 +127,12 @@ constant does. The guard that is enforced is the one that matters: an area may
 never be moved inside its own descendant, which would cut the branch loose into
 a cycle invisible to every query starting from a root.
 
+Changing a poster's areas after they have joined works the same way:
+`POST /api/team/members/:id/areas` resolves the chosen areas to a crew and moves
+the person to it. Editing `team_regions` in place would have silently changed
+the reach of everyone else in that crew — the sort of thing an admin finds out
+about later, from someone else.
+
 ## Areas as a tree
 
 Areas nest: an area with areas inside it *is* a region. One table, one nullable

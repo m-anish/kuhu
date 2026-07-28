@@ -116,7 +116,7 @@ Lost your phone? **Ask your admin.** They remove it and send a fresh invite.
 
 **You run one service. Everything you see is that service.**
 
-You can do everything a poster does, **plus three things**.
+You can do everything a poster does, **plus a few more things**.
 
 ### 1 · Bring people in
 
@@ -138,7 +138,14 @@ Sent it to the wrong person? **Cancel link**, before they open it.
 > grouped under the team each person sits in. A site admin sees several groups;
 > a poster's crew is just one of them.
 
-### 2 · Take people out
+### 2 · Change what someone covers
+
+**Areas** next to a poster's name. Same picker as the invite — pick a region and
+they get everything inside it, including areas added later.
+
+They move to a crew matching those areas. **Nobody else's reach changes.**
+
+### 3 · Take people out
 
 **Remove** next to their name.
 - Their phone stops working immediately
@@ -146,7 +153,7 @@ Sent it to the wrong person? **Cancel link**, before they open it.
 - You can't remove yourself
 - You can't remove anyone senior to you
 
-### 3 · Areas
+### 4 · Areas
 
 Admin → Areas. The heading names your service, so you always know which map you're editing.
 

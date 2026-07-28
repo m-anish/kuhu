@@ -86,7 +86,7 @@ const ROUTES = {
   '/api/invites': { invites: [] },
   '/api/team/members': { members: [
     { id: 1, name: 'Anish', role: 'site_admin', team_name: 'kuhu', is_you: true, can_remove: false },
-    { id: 2, name: 'Sohail', role: 'poster', team_name: 'Local line crew', can_remove: true },
+    { id: 2, name: 'Sohail', role: 'poster', team_name: 'Local line crew', service_slug: 'electricity', can_remove: true },
     { id: 3, name: 'Old', role: 'poster', team_name: 'Local line crew', revoked_at: '2026-01-01', can_remove: false },
   ] },
   '/api/services/electricity/areas': { areas: ME.services[0].regions },
@@ -177,6 +177,33 @@ console.log('\npeople are grouped by the team they sit in');
   check(!$$('#members .row')[0].textContent.includes('kuhu'),
     'the team is no longer repeated on every row');
   check($('#members-help').textContent.length > 0, 'and the list says what it is');
+}
+
+console.log('\nan admin can change one poster\u2019s areas');
+{
+  const rows = $$('#members .row');
+  const sohail = rows.find((r) => r.textContent.includes('Sohail'));
+  const you = rows.find((r) => r.textContent.includes('Anish'));
+  const areasBtn = [...sohail.querySelectorAll('button')].find((b) => b.textContent === 'Areas');
+  check(Boolean(areasBtn), 'a poster row offers an Areas button');
+  check(![...you.querySelectorAll('button')].some((b) => b.textContent === 'Areas'),
+    'a site admin row does not — they are not limited by area');
+  areasBtn.dispatchEvent(new window.Event('click'));
+  const form = sohail.querySelector('.rename-form');
+  check(Boolean(form), 'it opens a picker');
+  check(form.querySelectorAll('button.chip').length >= 2, 'listing that service\u2019s areas');
+  check(form.querySelectorAll('.rgroup').length === 1, 'with the region shown as a group');
+}
+
+console.log('\ncoverage and the area list show the hierarchy');
+{
+  check($$('#coverage .rgroup').length === 1, 'coverage chips are grouped by region',
+    `${$$('#coverage .rgroup').length}`);
+  check($$('#coverage .chip.whole').length === 1, 'and the region itself is coverable');
+  const nested = $$('#areas-all .row.nested');
+  check(nested.length === 1, 'the area list indents what sits inside something',
+    `${nested.length} nested`);
+  check(nested[0].textContent.includes('Naddi'), 'and it is the right one');
 }
 
 console.log('\nthe posting picker groups areas under their region');

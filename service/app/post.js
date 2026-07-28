@@ -685,6 +685,16 @@ function paintMember(box, m) {
         <strong>${escapeHtml(m.name)}${m.is_you ? ' ·' : ''}</strong>
         <div class="sub">${escapeHtml(bits.filter(Boolean).join(' · '))}</div>
       </div>`;
+    // A poster's reach can be changed after they have joined; an admin's is
+    // their whole service, so there is nothing to set.
+    if (m.role === 'poster' && m.can_remove) {
+      const areas = document.createElement('button');
+      areas.type = 'button';
+      areas.className = 'mini';
+      areas.textContent = t('member_areas');
+      areas.addEventListener('click', () => editMemberAreas(m, el));
+      el.append(areas);
+    }
     if (m.can_remove) {
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -706,6 +716,95 @@ function paintMember(box, m) {
   }
 }
 
+/**
+ * Change one poster's areas. Resolves to a crew exactly as their invite did,
+ * rather than editing team_regions in place — that would silently change the
+ * reach of everyone else in the same crew.
+ */
+function editMemberAreas(m, row) {
+  if (row.querySelector('.rename-form')) return;
+  const target = (me.services || []).find((s) => s.slug === m.service_slug) || svc;
+  if (!target) return say(t('no_service'), 'bad');
+
+  const chosen = new Set();
+  const form = document.createElement('div');
+  form.className = 'rename-form';
+  const label = document.createElement('span');
+  label.className = 'sub';
+  label.textContent = t('member_areas_help');
+  form.append(label);
+  const picker = document.createElement('div');
+  form.append(picker);
+
+  const covered = (node, ancestry) => ancestry.some((a) => chosen.has(a.slug));
+  const chip = (node, ancestry, whole) => {
+    const on = covered(node, ancestry) || chosen.has(node.slug);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = whole ? 'chip whole' : 'chip';
+    b.textContent = whole ? t('whole_region') : name(node);
+    b.setAttribute('aria-pressed', String(on));
+    b.disabled = covered(node, ancestry);
+    b.addEventListener('click', () => {
+      if (chosen.has(node.slug)) chosen.delete(node.slug);
+      else {
+        chosen.add(node.slug);
+        for (const l of leavesOf(node)) if (l.slug !== node.slug) chosen.delete(l.slug);
+      }
+      paint();
+    });
+    return b;
+  };
+  const group = (box, nodes, ancestry) => {
+    const flat = nodes.filter((n) => !n.children.length);
+    if (flat.length) {
+      const chips = document.createElement('div');
+      chips.className = 'chips';
+      for (const n of flat) chips.append(chip(n, ancestry, false));
+      box.append(chips);
+    }
+    for (const node of nodes.filter((n) => n.children.length)) {
+      const g = document.createElement('div');
+      g.className = 'rgroup';
+      const head = document.createElement('div');
+      head.className = 'rgroup-head';
+      const nm = document.createElement('span');
+      nm.className = 'rgroup-name';
+      nm.textContent = name(node);
+      head.append(nm, chip(node, ancestry, true));
+      g.append(head);
+      const inner = document.createElement('div');
+      group(inner, node.children, [...ancestry, node]);
+      if (covered(node, ancestry) || chosen.has(node.slug)) {
+        inner.classList.add('covered');
+        for (const b of inner.querySelectorAll('button')) { b.disabled = true; b.setAttribute('aria-pressed', 'true'); }
+      }
+      g.append(inner);
+      box.append(g);
+    }
+  };
+  const paint = () => { picker.textContent = ''; group(picker, regionTree(target.regions), []); };
+  paint();
+
+  const save = document.createElement('button');
+  save.type = 'button';
+  save.className = 'big';
+  save.style.marginTop = '0.6rem';
+  save.textContent = t('save_areas');
+  save.addEventListener('click', async () => {
+    if (!chosen.size) return say(t('pick_one'), 'bad');
+    save.disabled = true;
+    const res = await api(`/api/team/members/${m.id}/areas`, {
+      method: 'POST', body: JSON.stringify({ areas: [...chosen] }),
+    });
+    if (!res.ok) { say((await res.json().catch(() => ({}))).error || 'error', 'bad'); save.disabled = false; return; }
+    say(t('areas_saved'), 'ok');
+    loadMembers();
+  });
+  form.append(save);
+  row.append(form);
+}
+
 /** Which areas this admin's own crew covers, for the service being viewed. */
 function paintCoverage() {
   const box = $('#coverage');
@@ -718,7 +817,42 @@ function paintCoverage() {
   $('#geography-title').textContent = t('geography_title').replace('{service}', label);
   $('#count-areas').textContent = String(svc?.regions.length ?? 0);
   const covered = new Set((svc?.regions ?? []).map((r) => r.slug));
-  for (const a of allAreas.length ? allAreas : (svc?.regions ?? [])) {
+  const list = allAreas.length ? allAreas : (svc?.regions ?? []);
+  paintCoverageGroup(box, regionTree(list), covered);
+}
+
+/** Coverage chips, nested so the shape of the map is visible at a glance. */
+function paintCoverageGroup(box, nodes, covered) {
+  const flat = nodes.filter((n) => !n.children.length);
+  if (flat.length) {
+    const chips = document.createElement('div');
+    chips.className = 'chips';
+    for (const a of flat) chips.append(coverageChip(a, covered));
+    box.append(chips);
+  }
+  for (const node of nodes.filter((n) => n.children.length)) {
+    const group = document.createElement('div');
+    group.className = 'rgroup';
+    const head = document.createElement('div');
+    head.className = 'rgroup-head';
+    const label = document.createElement('span');
+    label.className = 'rgroup-name';
+    label.textContent = name(node);
+    head.append(label);
+    // The region is an area in its own right, so it toggles on its own — and
+    // covering it covers everything inside, now and later. Styled like the
+    // other region-level controls so it reads as one.
+    const own = coverageChip(node, covered);
+    own.classList.add('whole');
+    head.append(own);
+    group.append(head);
+    paintCoverageGroup(group, node.children, covered);
+    box.append(group);
+  }
+}
+
+function coverageChip(a, covered) {
+  {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'chip';
@@ -738,7 +872,7 @@ function paintCoverage() {
       sel.regions.clear();
       paintAreas(); paintCoverage();
     });
-    box.append(b);
+    return b;
   }
 }
 
@@ -758,34 +892,41 @@ function paintGeography() {
   const box = $('#areas-all');
   box.textContent = '';
   paintParentOptions();
-  for (const a of allAreas) {
-    const el = document.createElement('div');
-    el.className = 'row';
-    const inside = a.parent
-      ? `<div class="sub">${escapeHtml(t('inside_of').replace('{region}', labelOfSlug(a.parent)))}</div>`
-      : '';
-    el.innerHTML = `<div><strong>${escapeHtml(name(a))}</strong>`
-      + `<div class="sub"><code>${escapeHtml(a.slug)}</code></div>${inside}</div>`;
-    const nest = document.createElement('button');
-    nest.type = 'button';
-    nest.className = 'mini';
-    nest.textContent = t('nest');
-    nest.addEventListener('click', () => nestArea(a, el));
-    el.append(nest);
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'mini';
-    btn.textContent = t('rename');
-    btn.addEventListener('click', () => renameArea(a, el));
-    el.append(btn);
-    box.append(el);
-  }
+  // Depth-first, indented: "inside Naddi" on a row told you the fact but not
+  // the shape, and the shape is the thing you are trying to see here.
+  const walk = (nodes, depth) => {
+    for (const node of nodes) {
+      paintAreaRow(box, node, depth);
+      if (node.children.length) walk(node.children, depth + 1);
+    }
+  };
+  walk(regionTree(allAreas), 0);
 }
 
-function labelOfSlug(slug) {
-  const a = allAreas.find((x) => x.slug === slug);
-  return a ? name(a) : slug;
+function paintAreaRow(box, a, depth) {
+  const el = document.createElement('div');
+  el.className = `row${depth ? ' nested' : ''}`;
+  if (depth) el.style.setProperty('--depth', String(depth));
+  const holds = a.children?.length
+    ? `<div class="sub">${escapeHtml(t('holds_n').replace('{n}', String(a.children.length)))}</div>`
+    : '';
+  el.innerHTML = `<div><strong>${escapeHtml(name(a))}</strong>`
+    + `<div class="sub"><code>${escapeHtml(a.slug)}</code></div>${holds}</div>`;
+  const nest = document.createElement('button');
+  nest.type = 'button';
+  nest.className = 'mini';
+  nest.textContent = t('nest');
+  nest.addEventListener('click', () => nestArea(a, el));
+  el.append(nest);
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'mini';
+  btn.textContent = t('rename');
+  btn.addEventListener('click', () => renameArea(a, el));
+  el.append(btn);
+  box.append(el);
 }
+
 
 /** Anything in this service can hold areas — except the one being placed. */
 function parentChoices(exclude) {

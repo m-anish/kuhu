@@ -169,6 +169,12 @@ export const STRINGS = {
     foot_repo: 'Source on GitHub',
     foot_site: 'About kuhu',
     foot_help: 'Help',
+    // per-person areas
+    member_areas: 'Areas',
+    member_areas_help: 'Which areas this person answers for. Picking a region takes everything inside it, including areas added later.',
+    save_areas: 'Save areas',
+    areas_saved: 'Saved. Their reach changed straight away.',
+    holds_n: 'holds {n} inside',
     // people
     members_help: 'Everyone at or below you in the tree, grouped by the team they sit in. You can only see, and act on, your own branch.',
     members_help_one: 'Everyone on your team. The line under each name is what they are allowed to do.',
@@ -383,6 +389,12 @@ export const STRINGS = {
     foot_repo: 'GitHub पर कोड',
     foot_site: 'kuhu के बारे में',
     foot_help: 'मदद',
+    // per-person areas
+    member_areas: 'इलाके',
+    member_areas_help: 'यह व्यक्ति किन इलाकों के लिए ज़िम्मेदार है। कोई क्षेत्र चुनेंगे तो उसके अंदर सब शामिल, बाद में जोड़े गए भी।',
+    save_areas: 'इलाके सहेजें',
+    areas_saved: 'हो गया। उनकी पहुँच अभी बदल गई।',
+    holds_n: 'अंदर {n} इलाके',
     // people
     members_help: 'आपके नीचे के सारे लोग, अपनी-अपनी टीम के हिसाब से। आपको सिर्फ़ अपनी शाखा दिखती है, और उसी पर आपका ज़ोर चलता है।',
     members_help_one: 'आपकी टीम के सब लोग। नाम के नीचे लिखा है कि वे क्या कर सकते हैं।',

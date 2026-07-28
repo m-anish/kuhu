@@ -125,6 +125,12 @@ function paintServices() {
 function paintAreas() {
   const box = $('#areas');
   box.textContent = '';
+  const head = $('#area-head');
+  if (head) {
+    head.textContent = me.services.length > 1 && svc
+      ? `${t('area')} · ${`${svc.icon || ''} ${name(svc)}`.trim()}`
+      : t('area');
+  }
   // A service that has just been created has none yet. Say what to do about it
   // rather than showing an empty row.
   if (svc.regions.length === 0) {
@@ -528,6 +534,12 @@ async function loadMembers() {
 function paintCoverage() {
   const box = $('#coverage');
   box.textContent = '';
+  // Which service these areas belong to, said plainly in three places. A list
+  // of area names with no service attached is exactly as useful as no list.
+  const label = svc ? `${svc.icon || ''} ${name(svc)}`.trim() : '';
+  $('#areas-title').textContent = t('coverage_for').replace('{service}', label);
+  $('#coverage-help').textContent = t('coverage_help').replace('{service}', label);
+  $('#geography-title').textContent = t('geography_title').replace('{service}', label);
   $('#count-areas').textContent = String(svc?.regions.length ?? 0);
   const covered = new Set((svc?.regions ?? []).map((r) => r.slug));
   for (const a of allAreas.length ? allAreas : (svc?.regions ?? [])) {
@@ -681,6 +693,9 @@ function ensureVocabRows() {
   if (!$('#svc-kinds').children.length) {
     for (let i = 0; i < 2; i += 1) vocabRow($('#svc-kinds'), 'No supply', 'पानी नहीं आएगा');
   }
+  if (!$('#svc-areas').children.length) {
+    for (let i = 0; i < 2; i += 1) vocabRow($('#svc-areas'), 'Upper Zone', 'ऊपरी ज़ोन');
+  }
   if (!$('#svc-reasons').children.length) {
     vocabRow($('#svc-reasons'), 'Pipeline repair', 'पाइपलाइन की मरम्मत');
   }
@@ -706,12 +721,13 @@ async function addService() {
         name_hi: $('#svc-hi').value.trim(),
         icon: $('#svc-icon').value.trim(),
         kinds,
+        areas: readVocab('#svc-areas'),
         reasons: readVocab('#svc-reasons'),
       }),
     });
     if (!res.ok) return say((await res.json().catch(() => ({}))).error || 'error', 'bad');
     for (const id of ['#svc-en', '#svc-hi', '#svc-icon', '#svc-slug']) $(id).value = '';
-    $('#svc-kinds').textContent = ''; $('#svc-reasons').textContent = '';
+    $('#svc-kinds').textContent = ''; $('#svc-reasons').textContent = ''; $('#svc-areas').textContent = '';
     ensureVocabRows();
     say(t('service_added'), 'ok');
     // A new service changes what this admin reaches, so reload everything.
@@ -776,6 +792,7 @@ $('#new-slug').addEventListener('input', (e) => { e.target.dataset.touched = '1'
 $('#add-service').addEventListener('click', addService);
 $('#add-kind-row').addEventListener('click', () => vocabRow($('#svc-kinds'), 'Advisory', 'सूचना'));
 $('#add-reason-row').addEventListener('click', () => vocabRow($('#svc-reasons'), 'Tank cleaning', 'टंकी की सफ़ाई'));
+$('#add-area-row').addEventListener('click', () => vocabRow($('#svc-areas'), 'Lower Zone', 'निचला ज़ोन'));
 $('#svc-en').addEventListener('input', () => {
   const f = $('#svc-slug');
   if (f.dataset.touched === '1') return;

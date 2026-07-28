@@ -75,28 +75,26 @@ async function loadServices() {
 }
 
 /**
- * One service: a plain list of areas, and the word "service" never appears.
- * Several: one card per service, which opens to reveal its own areas. A card
- * rather than a filter chip, so choices made in one service stay visible while
- * another is open — these are additive, not a switch between views.
+ * Always one card per service, even when there is only one.
+ *
+ * Hiding the service layer for a single service was a mistake: it made the app
+ * look like a flat list of areas, so when a second service appeared nobody
+ * could tell which areas belonged to which — and a service with no areas yet
+ * vanished entirely. Naming the service costs one line and removes the whole
+ * class of confusion.
  */
 function paintPicker() {
   const box = $('#regions');
   box.textContent = '';
-
-  if (services.length === 1) {
-    box.append(areaChips(services[0]));
-    return;
-  }
 
   for (const svc of services) {
     const picked = svc.regions.filter((a) => chosen.has(key(svc.slug, a.slug))).length;
     const card = document.createElement('details');
     card.className = 'acc svc-card';
     card.style.setProperty('--svc-accent', svc.accent || 'var(--sage)');
-    // Open it if they already follow something here, or if it is the only
-    // place anything could go.
-    card.open = picked > 0;
+    // Open when they already follow something here, or when it is the only
+    // service and there is nothing to choose between.
+    card.open = picked > 0 || services.length === 1;
 
     const sum = document.createElement('summary');
     sum.innerHTML = `
@@ -110,7 +108,11 @@ function paintPicker() {
 
     const body = document.createElement('div');
     body.className = 'acc-body';
-    body.append(areaChips(svc));
+    if (svc.regions.length === 0) {
+      body.innerHTML = `<p class="empty">${escapeHtml(t('svc_no_areas'))}</p>`;
+    } else {
+      body.append(areaChips(svc));
+    }
     card.append(body);
     box.append(card);
   }
@@ -127,7 +129,7 @@ function areaChips(svc) {
     b.className = 'chip';
     b.textContent = name(area);
     b.setAttribute('aria-pressed', String(chosen.has(k)));
-    if (services.length > 1) b.setAttribute('aria-label', `${name(area)} — ${name(svc)}`);
+    b.setAttribute('aria-label', `${name(area)} — ${name(svc)}`);
     b.addEventListener('click', () => {
       chosen.has(k) ? chosen.delete(k) : chosen.add(k);
       saveChosen();

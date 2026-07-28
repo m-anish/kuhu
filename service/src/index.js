@@ -66,26 +66,34 @@ async function route(request, env, ctx, url) {
 
   // ───────────────────────── public ─────────────────────────
 
-  // One discovery call: every service that is switched on, and the areas that
-  // actually have a crew behind them. An area nobody covers is not offered.
+  // One discovery call: every service that is switched on, with the areas that
+  // have a crew behind them.
+  //
+  // LEFT JOIN, not JOIN: a service with no areas yet must still be listed.
+  // Dropping it made a newly created service invisible everywhere — including
+  // to the admin who had just made it — and, because the client hides the
+  // service layer when only one comes back, it silently reverted the whole app
+  // to looking single-service.
   if (method === 'GET' && path === '/api/services') {
     const { results } = await db.prepare(
       `SELECT DISTINCT s.id, s.slug, s.name_en, s.name_hi, s.icon, s.accent,
               s.kinds, s.reasons, s.sort,
               r.slug AS region_slug, r.name_en AS region_en, r.name_hi AS region_hi
        FROM services s
-       JOIN teams t        ON t.service_id = s.id
-       JOIN team_regions tr ON tr.team_id = t.id
-       JOIN regions r      ON r.id = tr.region_id
+       LEFT JOIN teams t        ON t.service_id = s.id
+       LEFT JOIN team_regions tr ON tr.team_id = t.id
+       LEFT JOIN regions r      ON r.id = tr.region_id AND r.service_id = s.id
        WHERE s.enabled = 1
        ORDER BY s.sort, s.slug, r.slug`,
     ).all();
     const byService = new Map();
     for (const row of results) {
       if (!byService.has(row.slug)) byService.set(row.slug, { ...publicService(row), regions: [] });
-      byService.get(row.slug).regions.push({
-        slug: row.region_slug, name_en: row.region_en, name_hi: row.region_hi,
-      });
+      if (row.region_slug) {
+        byService.get(row.slug).regions.push({
+          slug: row.region_slug, name_en: row.region_en, name_hi: row.region_hi,
+        });
+      }
     }
     return json({ services: [...byService.values()] }, 200, { 'cache-control': 'public, max-age=300' });
   }
@@ -618,8 +626,33 @@ async function route(request, env, ctx, url) {
     // one behind if the second half fails.
     try {
       const root = await newTeam(db, name_en, 900, svcRow.id);
-      await newTeam(db, `${name_en} crew`, root, svcRow.id);
+      const crew = await newTeam(db, `${name_en} crew`, root, svcRow.id);
+
+      // Areas given at creation time. A service with none is a service nobody
+      // can subscribe to or post about, so letting them be named here removes
+      // the most obvious way to end up with a half-made one.
+      for (const a of (Array.isArray(body?.areas) ? body.areas : []).slice(0, 40)) {
+        const aEn = String(a?.en || '').trim().slice(0, 60);
+        const aHi = String(a?.hi || '').trim().slice(0, 60);
+        if (!aEn || !aHi) continue;
+        const base = String(a?.slug || aEn).trim().toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 39);
+        if (!SLUG_RE.test(base)) continue;
+        // Slugs are unique across the site, so fall back to a service prefix
+        // rather than refusing the whole creation over a name collision.
+        const taken = await db.prepare('SELECT id FROM regions WHERE slug = ?1').bind(base).first();
+        const aSlug = taken ? `${slug}-${base}`.slice(0, 39) : base;
+        if (await db.prepare('SELECT id FROM regions WHERE slug = ?1').bind(aSlug).first()) continue;
+        await db.prepare(
+          'INSERT INTO regions (service_id, team_id, slug, name_en, name_hi) VALUES (?1, ?2, ?3, ?4, ?5)',
+        ).bind(svcRow.id, crew, aSlug, aEn, aHi).run();
+        const row = await db.prepare('SELECT id FROM regions WHERE slug = ?1').bind(aSlug).first();
+        await db.prepare('INSERT OR IGNORE INTO team_regions (team_id, region_id) VALUES (?1, ?2)')
+          .bind(crew, row.id).run();
+      }
     } catch (err) {
+      await db.prepare('DELETE FROM team_regions WHERE region_id IN (SELECT id FROM regions WHERE service_id = ?1)').bind(svcRow.id).run();
+      await db.prepare('DELETE FROM regions WHERE service_id = ?1').bind(svcRow.id).run();
       await db.prepare('DELETE FROM teams WHERE service_id = ?1').bind(svcRow.id).run();
       await db.prepare('DELETE FROM services WHERE id = ?1').bind(svcRow.id).run();
       throw err;

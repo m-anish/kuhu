@@ -70,7 +70,7 @@
     <h2 data-s="kind">Kind of notice</h2>
     <div id="kinds" class="chips"></div>
 
-    <h2 data-s="area">Area</h2>
+    <h2 id="area-head">Area</h2>
     <div id="areas" class="chips"></div>
 
     <h2 data-s="when">When</h2>
@@ -159,16 +159,16 @@
       <!-- Coverage: which areas this crew answers for, on this service. -->
       <details class="acc" id="acc-areas">
         <summary>
-          <span class="acc-title" data-s="coverage_title">Areas we cover</span>
+          <span class="acc-title" id="areas-title">Areas</span>
           <span class="acc-count" id="count-areas"></span>
         </summary>
         <div class="acc-body">
-          <p class="hint-p" data-s="coverage_help"></p>
+          <p class="hint-p" id="coverage-help"></p>
           <div id="coverage" class="chips"></div>
 
           <!-- Geography itself is site-wide, so only a site admin edits it. -->
           <div id="geography" class="hidden">
-            <h4 data-s="geography_title">All areas on kuhu</h4>
+            <h4 id="geography-title">All areas</h4>
             <p class="hint-p" data-s="geography_help"></p>
             <div id="areas-all"></div>
 
@@ -225,6 +225,11 @@
           <p class="hint-p" data-s="svc_kinds_help"></p>
           <div id="svc-kinds"></div>
           <button id="add-kind-row" class="big ghost" type="button" data-s="add_row">Add another</button>
+
+          <h4 data-s="svc_areas">Areas</h4>
+          <p class="hint-p" data-s="svc_areas_help"></p>
+          <div id="svc-areas"></div>
+          <button id="add-area-row" class="big ghost" type="button" data-s="add_row">Add another</button>
 
           <h4 data-s="svc_reasons">Reason presets</h4>
           <p class="hint-p" data-s="svc_reasons_help"></p>

@@ -186,7 +186,15 @@ async function route(request, env, ctx, url) {
 
   if (method === 'GET' && path === '/api/me') {
     if (!me) return unauthorized();
-    const coverage = coverageByService(await scopedCoverage(db, me.team_id));
+    // Services come from the team tree; areas come from coverage. Deriving the
+    // services *through* coverage would hide a service that has no areas yet —
+    // which is exactly the state every service is in the moment it is created,
+    // leaving whoever was just invited into it staring at nothing.
+    const covered = coverageByService(await scopedCoverage(db, me.team_id));
+    const coverage = (await scopedServices(db, me.team_id)).map((svc) => ({
+      ...svc,
+      regions: covered.find((c) => c.slug === svc.slug)?.regions ?? [],
+    }));
     return json({
       name: me.name,
       role: me.role,
@@ -199,7 +207,7 @@ async function route(request, env, ctx, url) {
         manage_people: isAdmin(me),
         manage_coverage: isAdmin(me),
         manage_areas: isAdmin(me),          // within the services they reach
-        manage_services: isSiteAdmin(me),   // creating a service is still SQL
+        manage_services: isSiteAdmin(me),
       },
     });
   }
@@ -557,6 +565,94 @@ async function route(request, env, ctx, url) {
     return json({ areas: results });
   }
 
+
+  // ── services: only a site admin may create one ────────────────────────────
+  // Creating a service also creates its root team (where its admins live) and
+  // a first crew (where its posters live), so it is usable the moment it
+  // exists rather than needing two more invisible steps.
+  if (method === 'POST' && path === '/api/services') {
+    if (!me) return unauthorized();
+    if (!isSiteAdmin(me)) return forbidden('site admin only');
+    const body = await request.json().catch(() => null);
+    const slug = (body?.slug || '').trim().toLowerCase();
+    const name_en = (body?.name_en || '').trim().slice(0, 60);
+    const name_hi = (body?.name_hi || '').trim().slice(0, 60);
+    const icon = (body?.icon || '').trim().slice(0, 8) || null;
+    const accent = /^#[0-9a-fA-F]{6}$/.test(body?.accent || '') ? body.accent : '#8fb573';
+    if (!SLUG_RE.test(slug)) return badRequest('slug: a-z, 0-9 and hyphens');
+    if (!name_en || !name_hi) return badRequest('both names are required');
+    if (await db.prepare('SELECT id FROM services WHERE slug = ?1').bind(slug).first()) {
+      return badRequest('that service already exists');
+    }
+
+    const clean = (arr, withKey) => (Array.isArray(arr) ? arr : [])
+      .map((x) => ({
+        ...(withKey ? { key: String(x?.key || x?.en || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 30) } : {}),
+        en: String(x?.en || '').trim().slice(0, 60),
+        hi: String(x?.hi || '').trim().slice(0, 60),
+      }))
+      .filter((x) => x.en && x.hi && (!withKey || x.key));
+    const kinds = clean(body?.kinds, true);
+    const reasons = clean(body?.reasons, false);
+    if (kinds.length === 0) return badRequest('a service needs at least one kind of notice');
+
+    const { max } = await db.prepare('SELECT COALESCE(MAX(sort), 0) AS max FROM services').first();
+    await db.prepare(
+      `INSERT INTO services (slug, name_en, name_hi, icon, accent, kinds, reasons, sort)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+    ).bind(slug, name_en, name_hi, icon, accent, JSON.stringify(kinds), JSON.stringify(reasons), max + 1).run();
+    const svcRow = await db.prepare('SELECT id FROM services WHERE slug = ?1').bind(slug).first();
+
+    // teams.invite_code is NOT NULL from Season 0 and cannot be dropped without
+    // a rebuild, so every new team still has to carry one. It is never read.
+    // A service without its teams is unusable and invisible, so don't leave
+    // one behind if the second half fails.
+    try {
+      const root = await newTeam(db, name_en, 900, svcRow.id);
+      await newTeam(db, `${name_en} crew`, root, svcRow.id);
+    } catch (err) {
+      await db.prepare('DELETE FROM teams WHERE service_id = ?1').bind(svcRow.id).run();
+      await db.prepare('DELETE FROM services WHERE id = ?1').bind(svcRow.id).run();
+      throw err;
+    }
+
+    return json({ slug, name_en, name_hi, icon, accent, kinds, reasons }, 201);
+  }
+
+  // Teams a person may target when inviting — their own subtree, labelled with
+  // the service each belongs to.
+  if (method === 'GET' && path === '/api/teams') {
+    if (!me) return unauthorized();
+    if (!isAdmin(me)) return forbidden('admin only');
+    const ids = await teamTree(db, me.team_id);
+    const marks = ids.map((_, i) => `?${i + 1}`).join(',');
+    const { results } = await db.prepare(
+      `SELECT t.id, t.name, t.parent_id, s.slug AS service_slug,
+              s.name_en AS service_en, s.name_hi AS service_hi, s.icon
+       FROM teams t LEFT JOIN services s ON s.id = t.service_id
+       WHERE t.id IN (${marks})
+       ORDER BY s.sort, t.id`,
+    ).bind(...ids).all();
+    return json({ teams: results });
+  }
+
+  // A crew inside a service, for when one is not enough.
+  const addTeam = path.match(/^\/api\/services\/([a-z0-9-]+)\/teams$/);
+  if (method === 'POST' && addTeam) {
+    if (!me) return unauthorized();
+    if (!isAdmin(me)) return forbidden('admin only');
+    const svcRow = await myService(db, me, addTeam[1]);
+    if (!svcRow) return forbidden('not your service');
+    const body = await request.json().catch(() => null);
+    const name = (body?.name || '').trim().slice(0, 60);
+    if (!name) return badRequest('a name is required');
+    const root = await db.prepare(
+      'SELECT id FROM teams WHERE service_id = ?1 AND parent_id = 900',
+    ).bind(svcRow.id).first();
+    const id = await newTeam(db, name, root?.id ?? me.team_id, svcRow.id);
+    return json({ id, name }, 201);
+  }
+
   // ───────────────────────── subscribers ─────────────────────────
 
   if (method === 'POST' && path === '/api/subscriptions') {
@@ -664,6 +760,16 @@ async function slugsToRegionIds(db, serviceId, slugs) {
     `SELECT id, slug FROM regions WHERE service_id = ?1 AND slug IN (${marks})`,
   ).bind(serviceId, ...slugs).all();
   return new Map(results.map((r) => [r.slug, r.id]));
+}
+
+/** Create a team, satisfying the vestigial NOT NULL invite_code. */
+async function newTeam(db, name, parentId, serviceId) {
+  const code = `t-${randomId('x', 10)}`;
+  await db.prepare(
+    'INSERT INTO teams (name, parent_id, service_id, invite_code) VALUES (?1, ?2, ?3, ?4)',
+  ).bind(name, parentId, serviceId, code).run();
+  const row = await db.prepare('SELECT id FROM teams WHERE invite_code = ?1').bind(code).first();
+  return row.id;
 }
 
 /** The service row, if this person actually reaches it. */

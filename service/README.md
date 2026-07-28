@@ -97,8 +97,8 @@ would rather be told than asked.
 | Role | Can |
 |---|---|
 | `poster` | Post and cancel notices for their crew's areas, on their crew's service. |
-| `service_admin` | That, plus: invite and remove people, and choose which areas the crew covers — within their own service. |
-| `site_admin` | That, plus: every service, and the shared geography (adding and renaming areas). |
+| `service_admin` | That, plus: invite and remove people, add and rename their service's areas, and choose which areas a crew covers — all within their own service. |
+| `site_admin` | That, plus: **creating services**, and reaching into every one of them. |
 
 Scope and powers are separate ideas. **Powers** come from the role; **scope**
 comes from where you sit in the team tree:

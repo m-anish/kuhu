@@ -36,6 +36,12 @@ CREATE TABLE IF NOT EXISTS teams (
   name       TEXT NOT NULL,
   parent_id  INTEGER REFERENCES teams(id),
   service_id INTEGER REFERENCES services(id),   -- NULL only for the global root
+  -- Vestigial: Season 0 joined a team by typing a shared code. Invite links
+  -- replaced that, but the column is NOT NULL in every migrated database and
+  -- cannot be dropped without a rebuild, so it is kept here too. Identical
+  -- shape everywhere beats a tidier fresh install and one code path that only
+  -- works on one of them.
+  invite_code TEXT UNIQUE,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

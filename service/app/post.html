@@ -112,6 +112,12 @@
             <span data-s="invite_as">Joining as</span>
             <div id="invite-role" class="chips"></div>
           </label>
+          <!-- Where the invitee lands. Hidden when there is only one place
+               they could go, which is the usual case. -->
+          <label class="field hidden" id="invite-target-row">
+            <span id="invite-target-label" data-s="invite_where">Into which</span>
+            <div id="invite-target" class="chips"></div>
+          </label>
           <label class="field">
             <span data-s="invite_valid">Link works for</span>
             <div id="invite-hours" class="chips"></div>
@@ -165,6 +171,50 @@
             </label>
             <button id="add-area" class="big" type="button" data-s="save_area">Add area</button>
           </div>
+        </div>
+      </details>
+    </section>
+
+      <!-- Site admin only: the services themselves. -->
+      <details class="acc hidden" id="acc-services">
+        <summary>
+          <span class="acc-title" data-s="services_title">Services</span>
+          <span class="acc-count" id="count-services"></span>
+        </summary>
+        <div class="acc-body">
+          <p class="hint-p" data-s="services_help"></p>
+          <div id="services-all"></div>
+
+          <h4 data-s="add_service">Add a service</h4>
+          <label class="field">
+            <span data-s="svc_en">Name in English</span>
+            <input id="svc-en" placeholder="Water">
+          </label>
+          <label class="field">
+            <span data-s="svc_hi">नाम (हिंदी)</span>
+            <input id="svc-hi" placeholder="पानी">
+          </label>
+          <label class="field">
+            <span data-s="svc_icon">Icon</span>
+            <input id="svc-icon" placeholder="💧" maxlength="4">
+          </label>
+          <label class="field">
+            <span data-s="svc_slug">Short id (permanent)</span>
+            <input id="svc-slug" autocapitalize="none" spellcheck="false">
+            <small class="hint" data-s="area_slug_help"></small>
+          </label>
+
+          <h4 data-s="svc_kinds">Kinds of notice</h4>
+          <p class="hint-p" data-s="svc_kinds_help"></p>
+          <div id="svc-kinds"></div>
+          <button id="add-kind-row" class="big ghost" type="button" data-s="add_row">Add another</button>
+
+          <h4 data-s="svc_reasons">Reason presets</h4>
+          <p class="hint-p" data-s="svc_reasons_help"></p>
+          <div id="svc-reasons"></div>
+          <button id="add-reason-row" class="big ghost" type="button" data-s="add_row">Add another</button>
+
+          <button id="add-service" class="big" type="button" style="margin-top:1rem" data-s="save_service">Create service</button>
         </div>
       </details>
     </section>

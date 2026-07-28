@@ -410,6 +410,12 @@ p.hint-p {
 
 .rename-form { flex-basis: 100%; margin-top: 0.7rem; }
 
+/* Two inputs side by side: a label and its Hindi, which is the unit a
+   service's vocabulary is built from. Stacks on a narrow screen. */
+.vocab-row { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
+.vocab-row input { flex: 1; min-width: 0; }
+@media (max-width: 420px) { .vocab-row { flex-direction: column; } }
+
 /* ---------- accordion sections ----------
    <details> rather than a JS tab widget: it is keyboard-operable and
    screen-reader-correct out of the box, and it degrades to "everything

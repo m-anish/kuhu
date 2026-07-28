@@ -14,7 +14,8 @@ let team = localStorage.getItem('kuhu.team') || '';
 let me = null;                       // { name, role, team, services[], can{} }
 let svc = null;                      // the service currently being posted to
 let sel = { regions: new Set(), kind: null, reason: null };
-let inviteSel = { role: 'poster', hours: 48 };
+let inviteSel = { role: 'poster', hours: 48, team: null };
+let teams = [];
 let lastInviteUrl = '';
 let moveUrl = '';
 
@@ -124,6 +125,12 @@ function paintServices() {
 function paintAreas() {
   const box = $('#areas');
   box.textContent = '';
+  // A service that has just been created has none yet. Say what to do about it
+  // rather than showing an empty row.
+  if (svc.regions.length === 0) {
+    box.innerHTML = `<p class="empty">${escapeHtml(t(me.can?.manage_areas ? 'no_areas_admin' : 'no_areas'))}</p>`;
+    return;
+  }
   if (svc.regions.length === 1) sel.regions.add(svc.regions[0].slug);
   for (const a of svc.regions) {
     const b = document.createElement('button');
@@ -305,11 +312,13 @@ function paintAdmin() {
   $('#acc-areas').classList.toggle('hidden', !can.manage_coverage);
   $('#geography').classList.toggle('hidden', !can.manage_areas);
   if (!can.manage_people) return;
-  paintInviteControls();
+  loadTeams();
   loadInvites();
   loadMembers();
   paintCoverage();
   if (can.manage_areas) loadAllAreas();
+  $('#acc-services').classList.toggle('hidden', !can.manage_services);
+  if (can.manage_services) { paintServicesAdmin(); ensureVocabRows(); }
 }
 
 function paintInviteControls() {
@@ -329,6 +338,7 @@ function paintInviteControls() {
     b.addEventListener('click', () => { inviteSel.role = r; paintInviteControls(); });
     roleBox.append(b);
   }
+  paintInviteTarget();
   const hoursBox = $('#invite-hours');
   hoursBox.textContent = '';
   for (const h of [24, 48, 168]) {
@@ -342,13 +352,55 @@ function paintInviteControls() {
   }
 }
 
+async function loadTeams() {
+  const res = await api('/api/teams');
+  teams = res.ok ? ((await res.json()).teams || []) : [];
+  paintInviteControls();
+}
+
+/**
+ * Where a new person lands. A service admin has one obvious answer and never
+ * sees this; a site admin has to say which service — otherwise there is no way
+ * to recruit into one.
+ */
+function paintInviteTarget() {
+  const row = $('#invite-target-row');
+  const box = $('#invite-target');
+  // A site admin lands on the global root; everyone else inherits their own.
+  const options = inviteSel.role === 'site_admin'
+    ? []
+    : inviteSel.role === 'service_admin'
+      ? teams.filter((t) => t.service_slug && t.parent_id === 900)   // service roots
+      : teams.filter((t) => t.service_slug && t.parent_id !== 900);  // crews
+  row.classList.toggle('hidden', options.length <= 1);
+  $('#invite-target-label').textContent =
+    t(inviteSel.role === 'service_admin' ? 'invite_which_service' : 'invite_which_crew');
+  if (options.length && !options.some((o) => o.id === inviteSel.team)) inviteSel.team = options[0].id;
+  if (!options.length) inviteSel.team = null;
+  box.textContent = '';
+  for (const o of options) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip';
+    b.textContent = `${o.icon || ''} ${o.name}`.trim();
+    b.setAttribute('aria-pressed', String(inviteSel.team === o.id));
+    b.addEventListener('click', () => { inviteSel.team = o.id; paintInviteTarget(); });
+    box.append(b);
+  }
+}
+
 async function makeInvite() {
   const btn = $('#make-invite');
   btn.disabled = true;
   try {
     const res = await api('/api/invites', {
       method: 'POST',
-      body: JSON.stringify({ role: inviteSel.role, hours: inviteSel.hours, note: $('#invite-note').value.trim() }),
+      body: JSON.stringify({
+        role: inviteSel.role,
+        hours: inviteSel.hours,
+        note: $('#invite-note').value.trim(),
+        ...(inviteSel.team ? { team: inviteSel.team } : {}),
+      }),
     });
     if (!res.ok) return say((await res.json().catch(() => ({}))).error || 'error', 'bad');
     const data = await res.json();
@@ -575,6 +627,80 @@ async function addArea() {
   }
 }
 
+// ---------- admin: services (site admin only) ----------
+
+function paintServicesAdmin() {
+  const box = $('#services-all');
+  $('#count-services').textContent = String(me.services.length);
+  box.textContent = '';
+  for (const sv of me.services) {
+    const el = document.createElement('div');
+    el.className = 'row';
+    el.innerHTML = `
+      <div>
+        <strong>${escapeHtml(`${sv.icon || ''} ${name(sv)}`.trim())}</strong>
+        <div class="sub"><code>${escapeHtml(sv.slug)}</code> · ${escapeHtml(
+          sv.kinds.map((k) => name(k)).join(', '))}</div>
+      </div>`;
+    box.append(el);
+  }
+}
+
+/** A pair of EN/HI inputs — the unit both kinds and reasons are built from. */
+function vocabRow(box, phEn, phHi) {
+  const row = document.createElement('div');
+  row.className = 'vocab-row';
+  row.innerHTML = `
+    <input class="v-en" placeholder="${escapeHtml(phEn)}">
+    <input class="v-hi" placeholder="${escapeHtml(phHi)}">`;
+  box.append(row);
+  return row;
+}
+
+function ensureVocabRows() {
+  if (!$('#svc-kinds').children.length) {
+    for (let i = 0; i < 2; i += 1) vocabRow($('#svc-kinds'), 'No supply', 'पानी नहीं आएगा');
+  }
+  if (!$('#svc-reasons').children.length) {
+    vocabRow($('#svc-reasons'), 'Pipeline repair', 'पाइपलाइन की मरम्मत');
+  }
+}
+
+function readVocab(sel) {
+  return [...document.querySelectorAll(`${sel} .vocab-row`)]
+    .map((r) => ({ en: r.querySelector('.v-en').value.trim(), hi: r.querySelector('.v-hi').value.trim() }))
+    .filter((x) => x.en && x.hi);
+}
+
+async function addService() {
+  const btn = $('#add-service');
+  const kinds = readVocab('#svc-kinds');
+  if (!kinds.length) return say(t('need_kind'), 'bad');
+  btn.disabled = true;
+  try {
+    const res = await api('/api/services', {
+      method: 'POST',
+      body: JSON.stringify({
+        slug: $('#svc-slug').value.trim().toLowerCase(),
+        name_en: $('#svc-en').value.trim(),
+        name_hi: $('#svc-hi').value.trim(),
+        icon: $('#svc-icon').value.trim(),
+        kinds,
+        reasons: readVocab('#svc-reasons'),
+      }),
+    });
+    if (!res.ok) return say((await res.json().catch(() => ({}))).error || 'error', 'bad');
+    for (const id of ['#svc-en', '#svc-hi', '#svc-icon', '#svc-slug']) $(id).value = '';
+    $('#svc-kinds').textContent = ''; $('#svc-reasons').textContent = '';
+    ensureVocabRows();
+    say(t('service_added'), 'ok');
+    // A new service changes what this admin reaches, so reload everything.
+    await showPostView();
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // ---------- moving to another phone ----------
 
 async function makeMove() {
@@ -627,6 +753,15 @@ $('#copy-link').addEventListener('click', () => copyText(lastInviteUrl));
 $('#add-area').addEventListener('click', addArea);
 $('#new-en').addEventListener('input', suggestSlug);
 $('#new-slug').addEventListener('input', (e) => { e.target.dataset.touched = '1'; });
+$('#add-service').addEventListener('click', addService);
+$('#add-kind-row').addEventListener('click', () => vocabRow($('#svc-kinds'), 'Advisory', 'सूचना'));
+$('#add-reason-row').addEventListener('click', () => vocabRow($('#svc-reasons'), 'Tank cleaning', 'टंकी की सफ़ाई'));
+$('#svc-en').addEventListener('input', () => {
+  const f = $('#svc-slug');
+  if (f.dataset.touched === '1') return;
+  f.value = $('#svc-en').value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 39);
+});
+$('#svc-slug').addEventListener('input', (e) => { e.target.dataset.touched = '1'; });
 $('#move').addEventListener('click', makeMove);
 $('#move-share').addEventListener('click', shareMove);
 $('#move-copy').addEventListener('click', () => copyText(moveUrl));

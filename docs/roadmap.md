@@ -37,6 +37,9 @@ The service runs at [kuhuapp.starstucklab.com](https://kuhuapp.starstucklab.com)
 - **A three-tier hierarchy** — site admin, service admin, crew — expressed as
   position in the team tree, with contextual visibility at every level and the
   whole thing hidden while only one service exists.
+- **Services created from the app** by a site admin, vocabulary and all, each
+  arriving with its own root team and first crew so it is usable immediately.
+  Site admins recruit into any service; service admins recruit into their own.
 - Admin panel as collapsible sections; the subscriber face points at Telegram
   and at the API/MQTT for anyone who would rather not use notifications.
 - Storage-container warnings and a paste-a-link fallback, because an installed
@@ -50,11 +53,6 @@ The service runs at [kuhuapp.starstucklab.com](https://kuhuapp.starstucklab.com)
 channel, which will not survive a second service — nobody wants water notices
 in a power-cut channel. The schema change is a `telegram_chat_id` on
 `services` (and later on `regions`) plus an admin field.
-
-**Service management in the app.** A site admin can already do everything
-*except* create a service: that is still an `INSERT`, because the editor for
-kinds and reason presets is real design work and there is exactly one service
-to manage. Worth building when there are three.
 
 **Devices should ignore stale retained state anyway.** The hourly cron clears
 expired topics, but a device that boots in the gap between expiry and the next
